@@ -1,6 +1,16 @@
-# wplace-ar
+<img width="1693" height="2048" alt="Pasted image 20250817152522" src="https://github.com/user-attachments/assets/4087b916-221e-452e-8d6c-7b998e837ede" /> 
 
-A augmented reality webapp that overlays ![https://wplace.live/](https://wplace.live/) artwork in the sky above your current location. Experience community-created pixel art floating in the air through your device's camera.
+
+
+<div align="center">
+  <i>The Inspiration</i>
+  
+  (Thanks [vonixskulls](https://x.com/vonixskulls/status/1953965288514265576) and [m1stakezwermade](https://x.com/m1stakezwermade/status/1954023746270114144) on Twitter)
+</div>
+
+<br>
+
+A augmented reality webapp that overlays [wplace.live](https://wplace.live/) artwork in the sky above your current location. Experience community-created pixel art floating in the air through your device's camera.
 
 ## Features
 
@@ -14,6 +24,8 @@ A augmented reality webapp that overlays ![https://wplace.live/](https://wplace.
 ## How It Works
 
 The app uses your device's geolocation to determine which section of the collaborative canvas to display. This artwork appears as a plane floating above you in 3D space, viewable through your device's camera feed. The experience adapts automatically between mobile AR mode (using device orientation) and desktop mode (using mouse controls).
+
+To get around CORS at the moment, requests to the API are routed through a Cloudflare Worker proxy. I turn this worker on/off to prevent abuse while developing at the moment so it may not always be available. The goal is to open this up when I'm happy with the state of the project to share to others.
 
 ## Quick Start
 
