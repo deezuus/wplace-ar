@@ -2,8 +2,8 @@
  * wPlace AR Viewer - Main Application
  * 
  * A web-based augmented reality application that overlays r/place-style tile data
- * from the sky above the user's current location. Uses device orientation for mobile
- * AR experience and mouse controls for desktop viewing.
+ * from the sky above the user's current location. Uses motion permission detection
+ * to automatically switch between device orientation (mobile) and mouse controls (desktop).
  * 
  * FEATURES:
  * - Camera feed background using WebRTC getUserMedia
@@ -85,30 +85,7 @@ let mouseY = 0;
 let cameraRotationX = 0; // pitch (up/down)
 let cameraRotationY = 0; // yaw (left/right)
 
-// Check if device orientation is available
-function checkDeviceOrientation() {
-  return new Promise((resolve) => {
-    if (!window.DeviceOrientationEvent) {
-      resolve(false);
-      return;
-    }
-    
-    // Test if device orientation actually works
-    let timeout = setTimeout(() => {
-      resolve(false);
-    }, 1000);
-    
-    function testHandler(event) {
-      if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
-        clearTimeout(timeout);
-        window.removeEventListener('deviceorientation', testHandler);
-        resolve(true);
-      }
-    }
-    
-    window.addEventListener('deviceorientation', testHandler);
-  });
-}
+
 
 // Desktop mouse look controls functions
 function onMouseDown(event) {
@@ -162,8 +139,38 @@ function isSecure() {
          location.hostname === 'localhost' ||
          location.hostname === '127.0.0.1';
 }
+// Check if we're on a mobile device
+function isMobileDevice() {
+  // Check user agent for mobile devices
+  const userAgentMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  // Check for touch-only devices (exclude desktop with touch screens)
+  const touchOnlyDevice = navigator.maxTouchPoints > 0 && 
+                         !window.matchMedia('(pointer: fine)').matches;
+  
+  const isMobile = userAgentMobile || touchOnlyDevice;
+  
+  // Debug logging
+  console.log('Mobile detection:', {
+    userAgent: navigator.userAgent,
+    userAgentMobile,
+    maxTouchPoints: navigator.maxTouchPoints,
+    hasFinePpointer: window.matchMedia('(pointer: fine)').matches,
+    touchOnlyDevice,
+    finalResult: isMobile
+  });
+  
+  return isMobile;
+}
+
 async function ensureMotionPermission() {
   if (!isSecure()) console.warn('Motion permission requires HTTPS or localhost');
+  
+  // First check if we're on a mobile device
+  if (!isMobileDevice()) {
+    return false; // Desktop - no motion permission needed
+  }
+  
   let granted = false;
   const DM = window.DeviceMotionEvent;
   const DO = window.DeviceOrientationEvent;
@@ -175,7 +182,7 @@ async function ensureMotionPermission() {
       const results = await Promise.allSettled(asks);
       granted = results.some(r => r.status === 'fulfilled' && r.value === 'granted');
     } else {
-      granted = true; // Android/desktop: no explicit request API
+      granted = true; // Android: no explicit request API but is mobile
     }
   } catch (e) {
     console.warn('Motion permission error:', e);
@@ -288,10 +295,10 @@ function recenterSky() {
   // Reset plane to directly above camera (at origin)
   plane.position.set(0, SKY_HEIGHT, 0);
   
-  // Also recenter camera if in desktop mode
+  camera.position.set(0, 0, 0);
+  
+  // Also recenter camera rotation if in desktop mode
   if (!hasDeviceOrientation) {
-    // Keep camera at origin
-    camera.position.set(0, 0, 0);
     cameraRotationX = Math.PI / 2; // Point straight up
     cameraRotationY = 0;
     camera.rotation.order = 'YXZ';
@@ -304,20 +311,32 @@ function recenterSky() {
 let started = false;
 startBtn.addEventListener('click', async () => {
   if (!started) {
-    // Check if device orientation is available
-    hasDeviceOrientation = await checkDeviceOrientation();
-    console.log('Device orientation available:', hasDeviceOrientation);
+    // Try to get motion permission to determine if we're on mobile
+    const motionPermissionGranted = await ensureMotionPermission();
+    hasDeviceOrientation = motionPermissionGranted;
+    console.log('Motion permission granted (mobile mode):', hasDeviceOrientation);
     
-    if (hasDeviceOrientation) {
-      const ok = await ensureMotionPermission();
-      if (!ok) { startBtn.textContent = 'Enable Motion/Orientation & Tap Again'; return; }
-      
-      // Initialize device orientation controls
+    // Set camera position to origin for both modes
+    camera.position.set(0, 0, 0);
+    
+    // Determine mode based on motion permission result
+    const isActuallyMobile = isMobileDevice();
+    console.log('Device detection - Mobile:', isActuallyMobile, 'Motion permission:', hasDeviceOrientation);
+    
+    if (hasDeviceOrientation && isActuallyMobile) {
+      // Mobile mode: use device orientation controls
+      console.log('Using mobile device orientation controls');
       controls = new DeviceOrientationControls(orientationProxy);
       controls.connect();
+    } else if (isActuallyMobile && !hasDeviceOrientation) {
+      // Mobile device but no motion permission - show error
+      console.log('Mobile device detected but no motion permission');
+      startBtn.textContent = 'Enable Motion/Orientation & Tap Again';
+      // Don't return - let the function continue to avoid double-click issue
+      // Just skip the video/plane setup for now
     } else {
       // Desktop mode: set up mouse look controls and point camera up
-      camera.position.set(0, 0, 0); // Keep camera at origin
+      console.log('Using desktop mouse look controls');
       
       // Start looking straight up (like mobile device)
       cameraRotationX = Math.PI / 2; // 90 degrees up
@@ -340,25 +359,27 @@ startBtn.addEventListener('click', async () => {
       console.log('Desktop mode: camera pointing up with mouse look controls');
     }
 
-    await startVideo();
-    
-    // Get location and calculate pixel offsets before creating the plane
-    const { lat, lon } = await getLatLonOnce();
-    const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
-    currentPixelOffsets = { pixelX, pixelY };
-    
-    // Camera stays at origin (0,0,0) - no need to move it
-    
-    // Now create the plane with correct positioning
-    if (!plane) createSkyPlane();
-    
-    // Load the texture
-    loadTileTexture(lat, lon);
+    // Only proceed with setup if we have proper controls (not the error case)
+    if (hasDeviceOrientation || !isActuallyMobile) {
+      await startVideo();
+      
+      // Get location and calculate pixel offsets before creating the plane
+      const { lat, lon } = await getLatLonOnce();
+      const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
+      currentPixelOffsets = { pixelX, pixelY };
+      
+      // Now create the plane with correct positioning
+      if (!plane) createSkyPlane();
+      
+      // Load the texture
+      loadTileTexture(lat, lon);
 
-    startBtn.textContent = 'Recenter Sky';
-    Object.assign(startBtn.style, {
-      width: '140px', height: '44px', inset: '', bottom: '20px', left: '50%', transform: 'translateX(-50%)'
-    });
+      startBtn.textContent = 'Recenter Sky';
+      Object.assign(startBtn.style, {
+        width: '140px', height: '44px', inset: '', bottom: '20px', left: '50%', transform: 'translateX(-50%)'
+      });
+    }
+    
     started = true;
   } else {
     recenterSky();
