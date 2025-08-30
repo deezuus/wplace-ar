@@ -2,20 +2,11 @@
 import basicSsl from '@vitejs/plugin-basic-ssl'
 
 export default {
+  base: '/wplace-ar/',
   plugins: [
     basicSsl({
       /** name of certification */
       name: 'wplace-ar',
     }),
   ],
-
-  server: {
-    proxy: {
-        '/wplace': {
-            target: 'https://backend.wplace.live',
-            changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/wplace/, ''),
-        }  
-    }
-  }
 }
