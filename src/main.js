@@ -37,7 +37,78 @@ async function startVideo() {
 
 // ---------- device orientation (3-DoF) ----------
 const orientationProxy = new THREE.Object3D();
-const controls = new DeviceOrientationControls(orientationProxy); // writes quaternion
+let controls = null;
+let hasDeviceOrientation = false;
+
+// Desktop mouse look controls
+let isMouseDown = false;
+let mouseX = 0;
+let mouseY = 0;
+let cameraRotationX = 0; // pitch (up/down)
+let cameraRotationY = 0; // yaw (left/right)
+
+// Check if device orientation is available
+function checkDeviceOrientation() {
+  return new Promise((resolve) => {
+    if (!window.DeviceOrientationEvent) {
+      resolve(false);
+      return;
+    }
+    
+    // Test if device orientation actually works
+    let timeout = setTimeout(() => {
+      resolve(false);
+    }, 1000);
+    
+    function testHandler(event) {
+      if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+        clearTimeout(timeout);
+        window.removeEventListener('deviceorientation', testHandler);
+        resolve(true);
+      }
+    }
+    
+    window.addEventListener('deviceorientation', testHandler);
+  });
+}
+
+// Desktop mouse look controls functions
+function onMouseDown(event) {
+  isMouseDown = true;
+  mouseX = event.clientX;
+  mouseY = event.clientY;
+  canvas.style.cursor = 'grabbing';
+}
+
+function onMouseUp() {
+  isMouseDown = false;
+  canvas.style.cursor = 'grab';
+}
+
+function onMouseMove(event) {
+  if (!isMouseDown || hasDeviceOrientation) return;
+  
+  const deltaX = event.clientX - mouseX;
+  const deltaY = event.clientY - mouseY;
+  
+  mouseX = event.clientX;
+  mouseY = event.clientY;
+  
+  // Sensitivity factor
+  const sensitivity = 0.002;
+  
+  // Update rotation (yaw and pitch)
+  cameraRotationY -= deltaX * sensitivity; // left/right
+  cameraRotationX -= deltaY * sensitivity; // up/down
+  
+  // Clamp pitch to prevent over-rotation
+  cameraRotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, cameraRotationX));
+  
+  // Apply rotation to camera
+  camera.rotation.order = 'YXZ';
+  camera.rotation.x = cameraRotationX;
+  camera.rotation.y = cameraRotationY;
+}
 
 // Adaptive smoothing (snappy)
 let smoothQ = new THREE.Quaternion();
@@ -111,7 +182,7 @@ function getLatLonOnce() {
 }
 
 // ---------- plane + texture (your proxy) ----------
-const SKY_HEIGHT = 150; // how high the plane floats above you
+const SKY_HEIGHT = 100; // how high the plane floats above you
 let plane = null;
 let planeMat = null;
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
@@ -127,18 +198,25 @@ function createSkyPlane() {
   plane = new THREE.Mesh(geom, planeMat);
   // Make it horizontal like a ceiling and put it in the sky
   plane.rotation.x = -Math.PI / 2;
-  // Position will be set when we load the tile texture with pixel offsets
-  plane.position.set(currentPixelOffsets.pixelX, SKY_HEIGHT, currentPixelOffsets.pixelY);
+  // Position plane so user's location within tile appears at camera position
+  // Offset plane so that the user's pixel position on the plane aligns with camera at origin
+  // Note: X-axis is flipped due to horizontal texture flip, so we reverse the X calculation
+  const offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2; // user position - center plane (flipped)
+  const offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY; // center plane - user position  
+  plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
   scene.add(plane);
 }
 
 function loadTileTexture(lat, lon) {
   const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
   // Store pixel offsets for positioning
-  currentPixelOffsets = { pixelX: pixelX * 5, pixelY: pixelY * 5 };
+  currentPixelOffsets = { pixelX, pixelY };
   // Update plane position if it exists
   if (plane) {
-    plane.position.set(pixelX, SKY_HEIGHT, pixelY);
+    // Note: X-axis is flipped due to horizontal texture flip, so we reverse the X calculation
+    const offsetX = pixelX - TILE_SIZE/2; // user position - center plane (flipped)
+    const offsetZ = TILE_SIZE/2 - pixelY; // center plane - user position
+    plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
   }
   const url = `https://wplace-proxy.darktorin.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
   const loader = new THREE.TextureLoader();
@@ -149,6 +227,11 @@ function loadTileTexture(lat, lon) {
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
+      
+      // Flip texture horizontally to make text readable
+      texture.repeat.x = -1;
+      texture.offset.x = 1;
+      
       planeMat.map = texture;
       planeMat.color.set(0xffffff);
       planeMat.transparent = true;
@@ -164,24 +247,69 @@ function loadTileTexture(lat, lon) {
 function recenterSky() {
   if (!plane) return;
   plane.rotation.set(-Math.PI / 2, 0, 0);
-  // Maintain the pixel-based positioning instead of resetting to origin
-  plane.position.set(currentPixelOffsets.pixelY / 10, SKY_HEIGHT, currentPixelOffsets.pixelX / 10);
+  // Reset plane to directly above camera (at origin)
+  plane.position.set(0, SKY_HEIGHT, 0);
+  
+  // Also recenter camera if in desktop mode
+  if (!hasDeviceOrientation) {
+    // Keep camera at origin
+    camera.position.set(0, 0, 0);
+    cameraRotationX = Math.PI / 2; // Point straight up
+    cameraRotationY = 0;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.x = cameraRotationX;
+    camera.rotation.y = cameraRotationY;
+  }
 }
 
 // ---------- start / recenter behavior ----------
 let started = false;
 startBtn.addEventListener('click', async () => {
   if (!started) {
-    const ok = await ensureMotionPermission();
-    if (!ok) { startBtn.textContent = 'Enable Motion/Orientation & Tap Again'; return; }
+    // Check if device orientation is available
+    hasDeviceOrientation = await checkDeviceOrientation();
+    console.log('Device orientation available:', hasDeviceOrientation);
+    
+    if (hasDeviceOrientation) {
+      const ok = await ensureMotionPermission();
+      if (!ok) { startBtn.textContent = 'Enable Motion/Orientation & Tap Again'; return; }
+      
+      // Initialize device orientation controls
+      controls = new DeviceOrientationControls(orientationProxy);
+      controls.connect();
+    } else {
+      // Desktop mode: set up mouse look controls and point camera up
+      camera.position.set(0, 0, 0); // Keep camera at origin
+      
+      // Start looking straight up (like mobile device)
+      cameraRotationX = Math.PI / 2; // 90 degrees up
+      cameraRotationY = 0;
+      camera.rotation.order = 'YXZ';
+      camera.rotation.x = cameraRotationX;
+      camera.rotation.y = cameraRotationY;
+      
+      // Add mouse event listeners
+      canvas.addEventListener('mousedown', onMouseDown);
+      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('mousemove', onMouseMove);
+      
+      // Prevent context menu on canvas
+      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+      
+      // Set cursor style for better UX
+      canvas.style.cursor = 'grab';
+      
+      console.log('Desktop mode: camera pointing up with mouse look controls');
+    }
 
     await startVideo();
-    controls.connect();
     
     // Get location and calculate pixel offsets before creating the plane
     const { lat, lon } = await getLatLonOnce();
     const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
     currentPixelOffsets = { pixelX, pixelY };
+    
+    // Camera stays at origin (0,0,0) - no need to move it
     
     // Now create the plane with correct positioning
     if (!plane) createSkyPlane();
@@ -201,28 +329,31 @@ startBtn.addEventListener('click', async () => {
 
 // ---------- render loop (adaptive smoothing) ----------
 renderer.setAnimationLoop((t) => {
-  controls.update(); // writes orientationProxy.quaternion
+  if (hasDeviceOrientation && controls) {
+    controls.update(); // writes orientationProxy.quaternion
 
-  if (!orientationInitialized) {
-    smoothQ.copy(orientationProxy.quaternion);
-    orientationInitialized = true;
+    if (!orientationInitialized) {
+      smoothQ.copy(orientationProxy.quaternion);
+      orientationInitialized = true;
+      lastT = t || performance.now();
+    }
+
+    const dt = Math.max(0.001, ((t || performance.now()) - lastT) / 1000);
     lastT = t || performance.now();
+
+    // Compute angular difference to adapt smoothing (snappy on large changes)
+    const targetQ = orientationProxy.quaternion;
+    const dot = THREE.MathUtils.clamp(smoothQ.dot(targetQ), -1, 1);
+    const ang = 2 * Math.acos(Math.abs(dot)); // radians
+    // Map angle to a time constant between slow and fast
+    const k = THREE.MathUtils.clamp(ang / 0.25, 0, 1); // 0 rad..~14° → 0..1
+    const tau = THREE.MathUtils.lerp(TAU_SLOW, TAU_BASE, k);
+    const alpha = dt / (tau + dt); // EMA factor, framerate-independent
+
+    smoothQ.slerp(targetQ, alpha);
+    camera.quaternion.copy(smoothQ);
   }
-
-  const dt = Math.max(0.001, ((t || performance.now()) - lastT) / 1000);
-  lastT = t || performance.now();
-
-  // Compute angular difference to adapt smoothing (snappy on large changes)
-  const targetQ = orientationProxy.quaternion;
-  const dot = THREE.MathUtils.clamp(smoothQ.dot(targetQ), -1, 1);
-  const ang = 2 * Math.acos(Math.abs(dot)); // radians
-  // Map angle to a time constant between slow and fast
-  const k = THREE.MathUtils.clamp(ang / 0.25, 0, 1); // 0 rad..~14° → 0..1
-  const tau = THREE.MathUtils.lerp(TAU_SLOW, TAU_BASE, k);
-  const alpha = dt / (tau + dt); // EMA factor, framerate-independent
-
-  smoothQ.slerp(targetQ, alpha);
-  camera.quaternion.copy(smoothQ);
+  // Desktop mode doesn't need updates in render loop - mouse events handle camera rotation
 
   renderer.render(scene, camera);
 });
