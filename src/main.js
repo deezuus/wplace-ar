@@ -1,3 +1,41 @@
+/**
+ * wPlace AR Viewer - Main Application
+ * 
+ * A web-based augmented reality application that overlays r/place-style tile data
+ * from the sky above the user's current location. Uses device orientation for mobile
+ * AR experience and mouse controls for desktop viewing.
+ * 
+ * FEATURES:
+ * - Camera feed background using WebRTC getUserMedia
+ * - Device orientation tracking (mobile) with adaptive smoothing
+ * - Mouse look controls (desktop) with pitch/yaw rotation
+ * - Geolocation-based tile loading from wPlace proxy API
+ * - Sky-positioned plane displaying tile texture at configurable height
+ * - Cross-platform support (iOS/Android/Desktop)
+ * - Permission handling for motion sensors (iOS 13+)
+ * - Automatic fallback to Toronto coordinates if geolocation fails
+ * 
+ * TECHNICAL DETAILS:
+ * - Built with Three.js WebGL renderer
+ * - Uses Mercator projection for lat/lon to tile coordinate conversion
+ * - Adaptive quaternion smoothing for natural device orientation tracking
+ * - Texture flipping to ensure text readability in AR view
+ * - Dynamic plane positioning based on user's pixel location within tile
+ * - 80° FOV camera for immersive AR experience
+ * 
+ * CONTROLS:
+ * - Mobile: Device orientation (gyroscope/accelerometer)
+ * - Desktop: Mouse drag to look around
+ * - "Start AR" button initializes camera and orientation
+ * - "Recenter Sky" button resets plane position above user
+ * 
+ * CONFIGURATION:
+ * - ZOOM_LEVEL: Map zoom level for tile resolution (default: 11)
+ * - TILE_SIZE: Size of each tile in 3D units (default: 1000)
+ * - SKY_HEIGHT: Height of plane above user (default: 100 units)
+ * - TAU_BASE/TAU_SLOW: Smoothing time constants for orientation tracking
+ */
+
 // main.js
 import * as THREE from 'three';
 import { DeviceOrientationControls } from 'three-stdlib';
