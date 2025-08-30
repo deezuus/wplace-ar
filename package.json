@@ -13,9 +13,13 @@
     "vite": "^7.1.2"
   },
   "dependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.46.3",
     "@vitejs/plugin-basic-ssl": "^2.1.0",
     "three": "^0.179.1",
     "three-stdlib": "^2.36.0"
+  },
+  "overrides": {
+    "vite": {
+      "rollup": "npm:@rollup/wasm-node"
+    }
   }
 }
