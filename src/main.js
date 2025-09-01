@@ -29,7 +29,7 @@
  * - Mobile: Device orientation (gyroscope/accelerometer) + initial compass orientation
  * - Desktop: Mouse drag to look around
  * - "Start AR" button initializes camera and orientation
- * - "Recenter Sky" button resets plane position above user
+
  * 
  * CONFIGURATION:
  * - ZOOM_LEVEL: Map zoom level for tile resolution (default: 11)
@@ -555,34 +555,7 @@ function loadSingleTileTexture(tileX, tileY, material) {
   );
 }
 
-function recenterSky() {
-  if (tileGrid.size === 0) return;
-  
-  // Reset camera position
-  camera.position.set(0, 0, 0);
-  
-  // Reposition all tiles based on current pixel offsets
-  tileGrid.forEach(({ plane, relativeX, relativeY }) => {
-    const position = calculateTilePosition(relativeX, relativeY);
-    plane.position.set(position.x, SKY_HEIGHT, position.z);
-    plane.rotation.set(-Math.PI / 2, 0, 0);
-  });
-  
-  // Ensure group has correct compass rotation
-  if (tileGroup && hasCompassHeading) {
-    const compassRadians = (initialCompassHeading * Math.PI) / 180;
-    tileGroup.rotation.y = compassRadians;
-  }
-  
-  // Also recenter camera rotation if in desktop mode
-  if (!hasDeviceOrientation) {
-    cameraRotationX = Math.PI / 2; // Point straight up
-    cameraRotationY = 0;
-    camera.rotation.order = 'YXZ';
-    camera.rotation.x = cameraRotationX;
-    camera.rotation.y = cameraRotationY;
-  }
-}
+
 
 // ---------- start / recenter behavior ----------
 let started = false;
@@ -654,15 +627,11 @@ startBtn.addEventListener('click', async () => {
       // Load the tile grid with textures
       loadTileGridTextures(lat, lon);
 
-      startBtn.textContent = 'Recenter Sky';
-      Object.assign(startBtn.style, {
-        width: '140px', height: '44px', inset: '', bottom: '20px', left: '50%', transform: 'translateX(-50%)'
-      });
+      // Hide the start button after initialization
+      startBtn.style.display = 'none';
     }
     
     started = true;
-  } else {
-    recenterSky();
   }
 });
 
