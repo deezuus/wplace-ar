@@ -390,6 +390,91 @@ compassIndicator.appendChild(compassCenter);
 compassIndicator.appendChild(compassText);
 document.body.appendChild(compassIndicator);
 
+// ---------- photo capture button ----------
+const photoBtn = document.createElement('button');
+photoBtn.textContent = '📷 Save Photo';
+Object.assign(photoBtn.style, {
+  position: 'fixed',
+  bottom: '20px',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  width: '140px',
+  height: '48px',
+  borderRadius: '24px',
+  border: '2px solid #fff',
+  fontSize: '16px',
+  background: 'rgba(0, 0, 0, 0.8)',
+  color: '#fff',
+  zIndex: 1000,
+  cursor: 'pointer',
+  display: 'none', // Hidden until AR starts
+  fontFamily: 'Arial, sans-serif',
+  fontWeight: 'bold',
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+  transition: 'all 0.2s ease'
+});
+
+// Add hover effects
+photoBtn.addEventListener('mouseenter', () => {
+  photoBtn.style.background = 'rgba(255, 255, 255, 0.9)';
+  photoBtn.style.color = '#000';
+  photoBtn.style.transform = 'translateX(-50%) scale(1.05)';
+});
+
+photoBtn.addEventListener('mouseleave', () => {
+  photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+  photoBtn.style.color = '#fff';
+  photoBtn.style.transform = 'translateX(-50%) scale(1)';
+});
+
+document.body.appendChild(photoBtn);
+
+// ---------- photo capture functionality ----------
+function capturePhoto() {
+  try {
+    // Render one frame to ensure everything is up to date
+    renderer.render(scene, camera);
+    
+    // Capture the canvas as a data URL
+    const dataURL = renderer.domElement.toDataURL('image/png', 1.0);
+    
+    // Create a temporary link element to trigger download
+    const link = document.createElement('a');
+    link.download = `wplace-ar-photo-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)}.png`;
+    link.href = dataURL;
+    
+    // Trigger the download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Visual feedback
+    photoBtn.textContent = '✓ Saved!';
+    photoBtn.style.background = 'rgba(0, 255, 0, 0.8)';
+    
+    setTimeout(() => {
+      photoBtn.textContent = '📷 Save Photo';
+      photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+    }, 2000);
+    
+    console.log('Photo captured and downloaded successfully');
+  } catch (error) {
+    console.error('Failed to capture photo:', error);
+    
+    // Error feedback
+    photoBtn.textContent = '❌ Error';
+    photoBtn.style.background = 'rgba(255, 0, 0, 0.8)';
+    
+    setTimeout(() => {
+      photoBtn.textContent = '📷 Save Photo';
+      photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+    }, 2000);
+  }
+}
+
+// Add click event listener to photo button
+photoBtn.addEventListener('click', capturePhoto);
+
 // ---------- geo → tile math ----------
 function latLonToTile(lat, lon, zoom, tileSize = 1000) {
   const x = (lon + 180) / 360;
@@ -676,8 +761,9 @@ startBtn.addEventListener('click', async () => {
       // Load the tile grid with textures
       loadTileGridTextures(lat, lon);
 
-      // Hide the start button after initialization
+      // Hide the start button and show photo button after initialization
       startBtn.style.display = 'none';
+      photoBtn.style.display = 'block';
     }
     
     started = true;
