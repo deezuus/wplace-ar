@@ -8,6 +8,7 @@
  * FEATURES:
  * - Camera feed background using WebRTC getUserMedia
  * - Device orientation tracking (mobile) with adaptive smoothing
+ * - Compass-based tile grid rotation aligned with real-world directions
  * - Mouse look controls (desktop) with pitch/yaw rotation
  * - Geolocation-based tile loading from wPlace proxy API
  * - Sky-positioned plane displaying tile texture at configurable height
@@ -16,15 +17,16 @@
  * - Automatic fallback to Toronto coordinates if geolocation fails
  * 
  * TECHNICAL DETAILS:
- * - Built with Three.js WebGL renderer
+ * - Built with Three.js WebGL renderer with grouped tile management
  * - Uses Mercator projection for lat/lon to tile coordinate conversion
  * - Adaptive quaternion smoothing for natural device orientation tracking
- * - Texture flipping to ensure text readability in AR view
- * - Dynamic plane positioning based on user's pixel location within tile
+ * - Initial compass heading detection for geographic alignment
+ * - Grouped tile rotation system for accurate cardinal direction mapping
+ * - Precise pixel-level positioning within tiles
  * - 80° FOV camera for immersive AR experience
  * 
  * CONTROLS:
- * - Mobile: Device orientation (gyroscope/accelerometer)
+ * - Mobile: Device orientation (gyroscope/accelerometer) + initial compass orientation
  * - Desktop: Mouse drag to look around
  * - "Start AR" button initializes camera and orientation
  * - "Recenter Sky" button resets plane position above user
@@ -34,6 +36,7 @@
  * - TILE_SIZE: Size of each tile in 3D units (default: 1000)
  * - SKY_HEIGHT: Height of plane above user (default: 100 units)
  * - TAU_BASE/TAU_SLOW: Smoothing time constants for orientation tracking
+ * - Initial compass heading captured for geographic alignment
  */
 
 // main.js
@@ -139,6 +142,106 @@ function isSecure() {
          location.hostname === 'localhost' ||
          location.hostname === '127.0.0.1';
 }
+
+// ---------- compass/magnetometer tracking ----------
+let initialCompassHeading = 0; // Initial compass heading for north orientation (degrees 0-360)
+let hasCompassHeading = false; // Whether we have captured initial compass heading
+let currentCompassHeading = 0; // Current compass heading for indicator updates
+let compassTrackingActive = false; // Whether real-time compass tracking is active
+
+function normalizeCompassHeading(heading) {
+  // Normalize heading to 0-360 degrees
+  heading = heading % 360;
+  return heading < 0 ? heading + 360 : heading;
+}
+
+function getCompassDirection(heading) {
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round(heading / 22.5) % 16;
+  return directions[index];
+}
+
+function updateCompassIndicator(heading) {
+  if (!compassIndicator) return;
+  
+  // Show compass indicator
+  compassIndicator.style.display = 'block';
+  
+  // Update needle rotation (heading is clockwise from north)
+  compassNeedle.style.transform = `translateX(-50%) rotate(${heading}deg)`;
+  
+  // Update text display
+  const direction = getCompassDirection(heading);
+  compassText.textContent = `${Math.round(heading)}° ${direction}`;
+  
+  console.log(`Compass: ${Math.round(heading)}° ${direction}`);
+}
+
+function getCompassHeading(event) {
+  let heading = null;
+  
+  if (event.webkitCompassHeading !== undefined) {
+    // iOS: webkitCompassHeading gives us magnetic north (0-360)
+    heading = event.webkitCompassHeading;
+  } else if (event.alpha !== null) {
+    // Android: alpha gives us the rotation around the z-axis
+    // For Android, we need to convert alpha to compass heading
+    // alpha is 0-360 where 0 is north, but it's inverted from compass heading
+    heading = 360 - event.alpha;
+  }
+  
+  return heading !== null ? normalizeCompassHeading(heading) : null;
+}
+
+function onDeviceOrientationChange(event) {
+  const newHeading = getCompassHeading(event);
+  
+  if (newHeading !== null) {
+    // Capture initial heading for tile grid orientation (only once)
+    if (!hasCompassHeading) {
+      initialCompassHeading = newHeading;
+      hasCompassHeading = true;
+      console.log('Initial compass heading captured:', initialCompassHeading.toFixed(1), '°');
+      
+      // Check compass accuracy if available (Android feature)
+      if (event.webkitCompassAccuracy !== undefined) {
+        const accuracy = event.webkitCompassAccuracy;
+        if (accuracy < 0) {
+          console.warn('Compass needs calibration - wave device in figure-8 pattern');
+        }
+      }
+    }
+    
+    // Always update current heading for indicator (continuous tracking)
+    if (compassTrackingActive) {
+      currentCompassHeading = newHeading;
+      updateCompassIndicator(currentCompassHeading);
+    }
+  }
+}
+
+function captureInitialCompassHeading() {
+  if (!isMobileDevice()) {
+    console.log('Compass not available on desktop - using default north orientation');
+    // Show compass indicator with default north (0°) for desktop
+    updateCompassIndicator(0);
+    return false;
+  }
+  
+  try {
+    window.addEventListener('deviceorientationabsolute', onDeviceOrientationChange, true);
+    window.addEventListener('deviceorientation', onDeviceOrientationChange, true);
+    compassTrackingActive = true; // Enable continuous tracking
+    console.log('Started compass tracking...');
+    return true;
+  } catch (error) {
+    console.warn('Failed to access compass:', error);
+    // Show compass indicator with default north (0°) on error
+    updateCompassIndicator(0);
+    return false;
+  }
+}
+
 // Check if we're on a mobile device
 function isMobileDevice() {
   // Check user agent for mobile devices
@@ -200,6 +303,88 @@ Object.assign(startBtn.style, {
 });
 document.body.appendChild(startBtn);
 
+// ---------- compass indicator UI ----------
+const compassIndicator = document.createElement('div');
+compassIndicator.style.cssText = `
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 100px;
+  height: 100px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  display: none;
+  z-index: 1000;
+  font-family: Arial, sans-serif;
+`;
+
+const compassNeedle = document.createElement('div');
+compassNeedle.style.cssText = `
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 2px;
+  height: 35px;
+  background: #ff0000;
+  transform-origin: bottom center;
+  transform: translateX(-50%);
+  border-radius: 1px;
+`;
+
+const compassCenter = document.createElement('div');
+compassCenter.style.cssText = `
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+`;
+
+const compassText = document.createElement('div');
+compassText.style.cssText = `
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  min-width: 60px;
+`;
+
+// Add compass direction markers
+const directions = ['N', 'E', 'S', 'W'];
+directions.forEach((dir, index) => {
+  const marker = document.createElement('div');
+  marker.textContent = dir;
+  marker.style.cssText = `
+    position: absolute;
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  `;
+  
+  const angle = index * 90;
+  const x = 50 + 35 * Math.sin(angle * Math.PI / 180);
+  const y = 50 - 35 * Math.cos(angle * Math.PI / 180);
+  marker.style.left = `${x - 6}px`;
+  marker.style.top = `${y - 7}px`;
+  
+  compassIndicator.appendChild(marker);
+});
+
+compassIndicator.appendChild(compassNeedle);
+compassIndicator.appendChild(compassCenter);
+compassIndicator.appendChild(compassText);
+document.body.appendChild(compassIndicator);
+
 // ---------- geo → tile math ----------
 function latLonToTile(lat, lon, zoom, tileSize = 1000) {
   const x = (lon + 180) / 360;
@@ -231,6 +416,25 @@ const SKY_HEIGHT = 100; // how high the plane floats above you
 let tileGrid = new Map(); // Map to store all tile planes by key "x,y"
 let centerTile = { tileX: 0, tileY: 0 }; // Current center tile coordinates
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
+let tileGroup = null; // Group container for all tile planes
+
+function calculateTilePosition(relativeX, relativeY) {
+  if (relativeX === 0 && relativeY === 0) {
+    // Center tile - apply user pixel offset for precise positioning
+    return {
+      x: TILE_SIZE/2 - currentPixelOffsets.pixelX,
+      z: TILE_SIZE/2 - currentPixelOffsets.pixelY
+    };
+  } else {
+    // Adjacent tile - position relative to center tile
+    const centerOffsetX = TILE_SIZE/2 - currentPixelOffsets.pixelX;
+    const centerOffsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
+    return {
+      x: centerOffsetX + (relativeX * TILE_SIZE),
+      z: centerOffsetZ - (relativeY * TILE_SIZE) // Invert Y for correct north/south
+    };
+  }
+}
 
 function createTilePlane(tileX, tileY, relativeX, relativeY) {
   const geom = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
@@ -245,25 +449,16 @@ function createTilePlane(tileX, tileY, relativeX, relativeY) {
   // Make it horizontal like a ceiling and put it in the sky
   plane.rotation.x = -Math.PI / 2;
   
-  // Position plane in the grid
-  // For center tile (0,0), apply user pixel offset
-  // For adjacent tiles, position them relative to center
-  let offsetX, offsetZ;
+  // Position plane in the grid (group will handle compass rotation)
+  const position = calculateTilePosition(relativeX, relativeY);
+  plane.position.set(position.x, SKY_HEIGHT, position.z);
   
-  if (relativeX === 0 && relativeY === 0) {
-    // Center tile - apply user pixel offset
-    offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
-    offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
-  } else {
-    // Adjacent tile - position relative to center tile
-    const centerOffsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
-    const centerOffsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
-    offsetX = centerOffsetX + (relativeX * TILE_SIZE);
-    offsetZ = centerOffsetZ + (relativeY * TILE_SIZE);
+  // Add plane to the tile group instead of directly to scene
+  if (!tileGroup) {
+    tileGroup = new THREE.Group();
+    scene.add(tileGroup);
   }
-  
-  plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
-  scene.add(plane);
+  tileGroup.add(plane);
   
   return { plane, material: planeMat };
 }
@@ -292,16 +487,31 @@ function createTileGrid(centerTileX, centerTileY) {
       });
     }
   }
+  
+  // Apply compass rotation to align with real-world directions
+  if (tileGroup && hasCompassHeading) {
+    const compassRadians = (initialCompassHeading * Math.PI) / 180;
+    tileGroup.rotation.y = compassRadians;
+    console.log('Applied compass rotation:', initialCompassHeading.toFixed(1), '°');
+  }
 }
 
 function clearTileGrid() {
-  // Remove all existing tile planes from scene
+  // Remove all existing tile planes from group
   tileGrid.forEach(({ plane }) => {
-    scene.remove(plane);
+    if (tileGroup) {
+      tileGroup.remove(plane);
+    }
     plane.geometry.dispose();
     plane.material.dispose();
   });
   tileGrid.clear();
+  
+  // Remove and recreate the tile group for clean state
+  if (tileGroup) {
+    scene.remove(tileGroup);
+    tileGroup = null;
+  }
 }
 
 function loadTileGridTextures(lat, lon) {
@@ -318,7 +528,7 @@ function loadTileGridTextures(lat, lon) {
     loadSingleTileTexture(tileTileX, tileTileY, material);
   });
   
-  console.log(`Loading 3x3 tile grid centered at ${tileX},${tileY} with pixel offsets:`, pixelX, pixelY);
+  console.log(`Loading tile grid at ${tileX},${tileY} (${pixelX},${pixelY})`);
 }
 
 function loadSingleTileTexture(tileX, tileY, material) {
@@ -332,10 +542,6 @@ function loadSingleTileTexture(tileX, tileY, material) {
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1);
-      
-      // Flip texture horizontally to make text readable
-      texture.repeat.x = -1;
-      texture.offset.x = 1;
       
       material.map = texture;
       material.color.set(0xffffff);
@@ -357,23 +563,16 @@ function recenterSky() {
   
   // Reposition all tiles based on current pixel offsets
   tileGrid.forEach(({ plane, relativeX, relativeY }) => {
-    let offsetX, offsetZ;
-    
-    if (relativeX === 0 && relativeY === 0) {
-      // Center tile - apply user pixel offset
-      offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
-      offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
-    } else {
-      // Adjacent tile - position relative to center tile
-      const centerOffsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
-      const centerOffsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
-      offsetX = centerOffsetX + (relativeX * TILE_SIZE);
-      offsetZ = centerOffsetZ + (relativeY * TILE_SIZE);
-    }
-    
-    plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
+    const position = calculateTilePosition(relativeX, relativeY);
+    plane.position.set(position.x, SKY_HEIGHT, position.z);
     plane.rotation.set(-Math.PI / 2, 0, 0);
   });
+  
+  // Ensure group has correct compass rotation
+  if (tileGroup && hasCompassHeading) {
+    const compassRadians = (initialCompassHeading * Math.PI) / 180;
+    tileGroup.rotation.y = compassRadians;
+  }
   
   // Also recenter camera rotation if in desktop mode
   if (!hasDeviceOrientation) {
@@ -406,6 +605,9 @@ startBtn.addEventListener('click', async () => {
       console.log('Using mobile device orientation controls');
       controls = new DeviceOrientationControls(orientationProxy);
       controls.connect();
+      
+      // Capture initial compass heading for mobile devices
+      captureInitialCompassHeading();
     } else if (isActuallyMobile && !hasDeviceOrientation) {
       // Mobile device but no motion permission - show error
       console.log('Mobile device detected but no motion permission');
@@ -415,6 +617,9 @@ startBtn.addEventListener('click', async () => {
     } else {
       // Desktop mode: set up mouse look controls and point camera up
       console.log('Using desktop mouse look controls');
+      
+      // Show compass indicator for desktop (default north orientation)
+      updateCompassIndicator(0);
       
       // Start looking straight up (like mobile device)
       cameraRotationX = Math.PI / 2; // 90 degrees up
@@ -463,17 +668,17 @@ startBtn.addEventListener('click', async () => {
 
 // ---------- render loop (adaptive smoothing) ----------
 renderer.setAnimationLoop((t) => {
+  const currentTime = t || performance.now();
+  const dt = Math.max(0.001, (currentTime - lastT) / 1000);
+  lastT = currentTime;
+
   if (hasDeviceOrientation && controls) {
     controls.update(); // writes orientationProxy.quaternion
 
     if (!orientationInitialized) {
       smoothQ.copy(orientationProxy.quaternion);
       orientationInitialized = true;
-      lastT = t || performance.now();
     }
-
-    const dt = Math.max(0.001, ((t || performance.now()) - lastT) / 1000);
-    lastT = t || performance.now();
 
     // Compute angular difference to adapt smoothing (snappy on large changes)
     const targetQ = orientationProxy.quaternion;
@@ -487,6 +692,9 @@ renderer.setAnimationLoop((t) => {
     smoothQ.slerp(targetQ, alpha);
     camera.quaternion.copy(smoothQ);
   }
+  
+  // No real-time compass updates needed - using initial heading only
+  
   // Desktop mode doesn't need updates in render loop - mouse events handle camera rotation
 
   renderer.render(scene, camera);
