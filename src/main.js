@@ -52,6 +52,11 @@ renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.001, 15000);
 
+// ---------- fog parameters for distance-based fading ----------
+// TILE_SIZE is 1000, so with a 3x3 grid, adjacent tiles are at distances of ~1000-1414 units
+const fogNear = 500;  // Start fading just beyond adjacent tiles
+const fogFar = 1800; // Completely fade
+
 // ---------- camera feed background ----------
 const video = document.createElement('video');
 video.setAttribute('playsinline', '');
@@ -418,6 +423,55 @@ let centerTile = { tileX: 0, tileY: 0 }; // Current center tile coordinates
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
 let tileGroup = null; // Group container for all tile planes
 
+// ---------- fog-enabled material for distance fading ----------
+function createAlphaFogMaterial() {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff00ff, // bright debug until texture arrives
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 1
+  });
+  
+  material.onBeforeCompile = function (shader) {
+    // Add custom fog uniforms
+    shader.uniforms.customFogNear = { value: fogNear };
+    shader.uniforms.customFogFar = { value: fogFar };
+    
+    // Add the custom fog calculation
+    const alphaFog = `
+      // Custom fog calculation for alpha fading
+      float depth = gl_FragCoord.z / gl_FragCoord.w;
+      float fogFactor = smoothstep(customFogNear, customFogFar, depth);
+      gl_FragColor.a *= (0.7 - fogFactor);
+    `;
+
+    // Insert the fog calculation before the end of the fragment shader
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      alphaFog + '\n#include <dithering_fragment>'
+    );
+    
+    // Add uniform declarations
+    shader.fragmentShader = 'uniform float customFogNear;\nuniform float customFogFar;\n' + shader.fragmentShader;
+
+    material.userData.shader = shader;
+  };
+
+  return material;
+}
+
+// Helper function to adjust fog parameters dynamically
+function updateFogParameters(near, far) {
+  // Update all tile materials with new fog parameters
+  tileGrid.forEach(({ material }) => {
+    if (material.userData.shader) {
+      material.userData.shader.uniforms.customFogNear.value = near;
+      material.userData.shader.uniforms.customFogFar.value = far;
+    }
+  });
+  console.log(`Fog parameters updated: near=${near}, far=${far}`);
+}
+
 function calculateTilePosition(relativeX, relativeY) {
   if (relativeX === 0 && relativeY === 0) {
     // Center tile - apply user pixel offset for precise positioning
@@ -438,12 +492,7 @@ function calculateTilePosition(relativeX, relativeY) {
 
 function createTilePlane(tileX, tileY, relativeX, relativeY) {
   const geom = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
-  const planeMat = new THREE.MeshBasicMaterial({
-    color: 0xff00ff, // bright debug until texture arrives
-    side: THREE.DoubleSide,
-    transparent: false,
-    opacity: 1
-  });
+  const planeMat = createAlphaFogMaterial(); // Use fog-enabled material
   const plane = new THREE.Mesh(geom, planeMat);
   
   // Make it horizontal like a ceiling and put it in the sky
