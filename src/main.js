@@ -736,6 +736,9 @@ startBtn.addEventListener('click', async () => {
       // Desktop mode: set up mouse look controls and point camera up
       console.log('Using desktop mouse look controls');
       
+      // Show alert for desktop users
+      alert('This AR experience is best enjoyed on mobile devices with motion sensors.\n\nOn desktop, you can still look around by clicking and dragging to explore!');
+      
       // Show compass indicator for desktop (default north orientation)
       updateCompassIndicator(0);
       
