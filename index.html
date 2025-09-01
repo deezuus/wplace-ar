@@ -5,14 +5,61 @@
 <meta charset="UTF-8"> 
 <title>wplace-ar</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2270%22 font-size=%2280%22 text-anchor=%22middle%22>🌎</text></svg>">
-<link rel='stylesheet' type='text/css' href='../css/style.css' />
+<link rel='stylesheet' type='text/css' href='src/style.css' />
 <script type='module' src='src/main.js'></script>
 </head>
 <body>
 <main>
+  <!-- AR Canvas -->
+  <canvas id="glscene"></canvas>
 
-<canvas id="glscene"></canvas>
+  <!-- Start Screen -->
+  <div id="start-screen" class="screen">
+    <div class="permission-explanation">
+      <h2>Wplace AR Viewer</h2>
+      <p class="app-description">
+        This app displays wplace.live tiles in the sky using <br> augmented reality.
+      </p>
+      <div class="permissions-info">
+        <p><strong>Required permissions:</strong></p>
+        <div class="permission-item">
+          <span class="permission-icon">📷</span>
+          <span><strong>Camera</strong> - to overlay the tiles over your camera feed</span>
+        </div>
+        <div class="permission-item">
+            <span class="permission-icon">🌍</span>
+            <span><strong>GPS</strong> - to get the right tiles over your location</span>
+          </div>
+        <div class="permission-item">
+          <span class="permission-icon">🧭</span>
+          <span><strong>Motion sensors</strong> - to track your device orientation and look around</span>
+        </div>
+        <br>
+        <p class="app-description">The app will still work to an extent without these permissions.</p>
+        <p> Your data is processed locally on device and not stored anywhere. <br> (you'll just have to trust me, click on random links on the internet at your own risk)
+            <br><br> Source code is available <a href="https://github.com/darktorinuhhh/wplace-ar">here</a></p>
+        <p> Enjoy! And remember not to doxx yourself!</p>
+    </div>
+    </div>
+    <button id="start-btn" class="primary-button">Start AR</button>
+  </div>
 
+  <!-- AR Interface -->
+  <div id="ar-interface" class="screen hidden">
+    <!-- Compass Indicator -->
+    <div id="compass-indicator" class="compass">
+      <div class="compass-needle"></div>
+      <div class="compass-center"></div>
+      <div class="compass-text"></div>
+      <div class="compass-direction compass-n">N</div>
+      <div class="compass-direction compass-e">E</div>
+      <div class="compass-direction compass-s">S</div>
+      <div class="compass-direction compass-w">W</div>
+    </div>
+
+    <!-- Photo Capture Button -->
+    <button id="photo-btn" class="photo-button">📷 Save Photo</button>
+  </div>
 </main>
 </body>
 </html>

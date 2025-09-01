@@ -171,7 +171,11 @@ function updateCompassIndicator(heading) {
   if (!compassIndicator) return;
   
   // Show compass indicator only if debug variable is enabled
-  compassIndicator.style.display = DEBUG_SHOW_COMPASS ? 'block' : 'none';
+  if (DEBUG_SHOW_COMPASS) {
+    compassIndicator.classList.remove('hidden');
+  } else {
+    compassIndicator.classList.add('hidden');
+  }
   
   // Update needle rotation (heading is clockwise from north)
   compassNeedle.style.transform = `translateX(-50%) rotate(${heading}deg)`;
@@ -299,136 +303,29 @@ async function ensureMotionPermission() {
   return granted;
 }
 
-// ---------- start / recenter button ----------
-const startBtn = document.createElement('button');
-startBtn.textContent = 'Start AR';
-Object.assign(startBtn.style, {
-  position: 'fixed', inset: '0', margin: 'auto', width: '60%', maxWidth: '360px',
-  height: '56px', borderRadius: '14px', border: 'none', fontSize: '18px',
-  background: '#111', color: '#fff', zIndex: 9999
-});
-document.body.appendChild(startBtn);
+// ---------- UI element references (to be set after DOM loads) ----------
+let startScreen, arInterface, startBtn;
+let compassIndicator, compassNeedle, compassText;
+let photoBtn;
 
-// ---------- compass indicator UI ----------
-const compassIndicator = document.createElement('div');
-compassIndicator.style.cssText = `
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  width: 100px;
-  height: 100px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  display: none;
-  z-index: 1000;
-  font-family: Arial, sans-serif;
-`;
-
-const compassNeedle = document.createElement('div');
-compassNeedle.style.cssText = `
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  width: 2px;
-  height: 35px;
-  background: #ff0000;
-  transform-origin: bottom center;
-  transform: translateX(-50%);
-  border-radius: 1px;
-`;
-
-const compassCenter = document.createElement('div');
-compassCenter.style.cssText = `
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  background: #fff;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-`;
-
-const compassText = document.createElement('div');
-compassText.style.cssText = `
-  position: absolute;
-  bottom: -25px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #fff;
-  font-size: 12px;
-  font-weight: bold;
-  text-align: center;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-  min-width: 60px;
-`;
-
-// Add compass direction markers
-const directions = ['N', 'E', 'S', 'W'];
-directions.forEach((dir, index) => {
-  const marker = document.createElement('div');
-  marker.textContent = dir;
-  marker.style.cssText = `
-    position: absolute;
-    color: #fff;
-    font-size: 14px;
-    font-weight: bold;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-  `;
+// Initialize UI elements when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  startScreen = document.getElementById('start-screen');
+  arInterface = document.getElementById('ar-interface');
+  startBtn = document.getElementById('start-btn');
+  compassIndicator = document.getElementById('compass-indicator');
+  compassNeedle = document.querySelector('.compass-needle');
+  compassText = document.querySelector('.compass-text');
+  photoBtn = document.getElementById('photo-btn');
   
-  const angle = index * 90;
-  const x = 50 + 35 * Math.sin(angle * Math.PI / 180);
-  const y = 50 - 35 * Math.cos(angle * Math.PI / 180);
-  marker.style.left = `${x - 6}px`;
-  marker.style.top = `${y - 7}px`;
+  // All UI elements are now properly initialized
   
-  compassIndicator.appendChild(marker);
+  // Add event listeners
+  if (startBtn) startBtn.addEventListener('click', startAR);
+  if (photoBtn) photoBtn.addEventListener('click', capturePhoto);
 });
 
-compassIndicator.appendChild(compassNeedle);
-compassIndicator.appendChild(compassCenter);
-compassIndicator.appendChild(compassText);
-document.body.appendChild(compassIndicator);
 
-// ---------- photo capture button ----------
-const photoBtn = document.createElement('button');
-photoBtn.textContent = '📷 Save Photo';
-Object.assign(photoBtn.style, {
-  position: 'fixed',
-  bottom: '20px',
-  left: '50%',
-  transform: 'translateX(-50%)',
-  width: '140px',
-  height: '48px',
-  borderRadius: '24px',
-  border: '2px solid #fff',
-  fontSize: '16px',
-  background: 'rgba(0, 0, 0, 0.8)',
-  color: '#fff',
-  zIndex: 1000,
-  cursor: 'pointer',
-  display: 'none', // Hidden until AR starts
-  fontFamily: 'Arial, sans-serif',
-  fontWeight: 'bold',
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-  transition: 'all 0.2s ease'
-});
-
-// Add hover effects
-photoBtn.addEventListener('mouseenter', () => {
-  photoBtn.style.background = 'rgba(255, 255, 255, 0.9)';
-  photoBtn.style.color = '#000';
-  photoBtn.style.transform = 'translateX(-50%) scale(1.05)';
-});
-
-photoBtn.addEventListener('mouseleave', () => {
-  photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
-  photoBtn.style.color = '#fff';
-  photoBtn.style.transform = 'translateX(-50%) scale(1)';
-});
-
-document.body.appendChild(photoBtn);
 
 // ---------- photo capture functionality ----------
 function capturePhoto() {
@@ -472,9 +369,6 @@ function capturePhoto() {
     }, 2000);
   }
 }
-
-// Add click event listener to photo button
-photoBtn.addEventListener('click', capturePhoto);
 
 // ---------- geo → tile math ----------
 function latLonToTile(lat, lon, zoom, tileSize = 1000) {
@@ -708,7 +602,8 @@ function loadSingleTileTexture(tileX, tileY, material) {
 
 // ---------- start / recenter behavior ----------
 let started = false;
-startBtn.addEventListener('click', async () => {
+
+async function startAR() {
   if (!started) {
     // Try to get motion permission to determine if we're on mobile
     const motionPermissionGranted = await ensureMotionPermission();
@@ -767,7 +662,7 @@ startBtn.addEventListener('click', async () => {
       console.log('Desktop mode: camera pointing up with mouse look controls');
     }
 
-    // Only proceed with setup if we have proper controls (not the error case)
+    // Only proceed with full setup if we have proper controls (not the error case)
     if (hasDeviceOrientation || !isActuallyMobile) {
       await startVideo();
       
@@ -779,14 +674,19 @@ startBtn.addEventListener('click', async () => {
       // Load the tile grid with textures
       loadTileGridTextures(lat, lon);
 
-      // Hide the start button and show photo button after initialization
-      startBtn.style.display = 'none';
-      photoBtn.style.display = 'block';
+      // Switch from start screen to AR interface
+      startScreen.classList.add('hidden');
+      arInterface.classList.remove('hidden');
+      console.log('Switched to AR interface');
+    } else {
+      // Mobile device without motion permission - just hide start screen and show button change
+      console.log('Mobile device without motion permission - staying on start screen');
+      // Don't hide the start screen in this case, just update the button text
     }
     
     started = true;
   }
-});
+}
 
 // ---------- render loop (adaptive smoothing) ----------
 renderer.setAnimationLoop((t) => {
