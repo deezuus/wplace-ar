@@ -36,6 +36,7 @@
  * - TILE_SIZE: Size of each tile in 3D units (default: 1000)
  * - SKY_HEIGHT: Height of plane above user (default: 100 units)
  * - TAU_BASE/TAU_SLOW: Smoothing time constants for orientation tracking
+ * - DEBUG_SHOW_COMPASS: Show/hide compass indicator (default: true)
  * - Initial compass heading captured for geographic alignment
  */
 
@@ -169,8 +170,8 @@ function getCompassDirection(heading) {
 function updateCompassIndicator(heading) {
   if (!compassIndicator) return;
   
-  // Show compass indicator
-  compassIndicator.style.display = 'block';
+  // Show compass indicator only if debug variable is enabled
+  compassIndicator.style.display = DEBUG_SHOW_COMPASS ? 'block' : 'none';
   
   // Update needle rotation (heading is clockwise from north)
   compassNeedle.style.transform = `translateX(-50%) rotate(${heading}deg)`;
@@ -488,6 +489,9 @@ function latLonToTile(lat, lon, zoom, tileSize = 1000) {
 }
 const ZOOM_LEVEL = 11;
 const TILE_SIZE = 1000;
+
+// Debug configuration
+const DEBUG_SHOW_COMPASS = false; // Set to false to hide compass display
 
 const FALLBACK = { lat: 43.642567, lon: -79.387054 };
 
