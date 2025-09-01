@@ -226,46 +226,106 @@ function getLatLonOnce() {
   });
 }
 
-// ---------- plane + texture (your proxy) ----------
+// ---------- tile grid system (3x3 grid with adjacent tiles) ----------
 const SKY_HEIGHT = 100; // how high the plane floats above you
-let plane = null;
-let planeMat = null;
+let tileGrid = new Map(); // Map to store all tile planes by key "x,y"
+let centerTile = { tileX: 0, tileY: 0 }; // Current center tile coordinates
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
 
-function createSkyPlane() {
+function createTilePlane(tileX, tileY, relativeX, relativeY) {
   const geom = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
-  planeMat = new THREE.MeshBasicMaterial({
+  const planeMat = new THREE.MeshBasicMaterial({
     color: 0xff00ff, // bright debug until texture arrives
     side: THREE.DoubleSide,
     transparent: false,
     opacity: 1
   });
-  plane = new THREE.Mesh(geom, planeMat);
+  const plane = new THREE.Mesh(geom, planeMat);
+  
   // Make it horizontal like a ceiling and put it in the sky
   plane.rotation.x = -Math.PI / 2;
-  // Position plane so user's location within tile appears at camera position
-  // Offset plane so that the user's pixel position on the plane aligns with camera at origin
-  // Note: X-axis is flipped due to horizontal texture flip, so we reverse the X calculation
-  const offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2; // user position - center plane (flipped)
-  const offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY; // center plane - user position  
+  
+  // Position plane in the grid
+  // For center tile (0,0), apply user pixel offset
+  // For adjacent tiles, position them relative to center
+  let offsetX, offsetZ;
+  
+  if (relativeX === 0 && relativeY === 0) {
+    // Center tile - apply user pixel offset
+    offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
+    offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
+  } else {
+    // Adjacent tile - position relative to center tile
+    const centerOffsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
+    const centerOffsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
+    offsetX = centerOffsetX + (relativeX * TILE_SIZE);
+    offsetZ = centerOffsetZ + (relativeY * TILE_SIZE);
+  }
+  
   plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
   scene.add(plane);
+  
+  return { plane, material: planeMat };
 }
 
-function loadTileTexture(lat, lon) {
+function createTileGrid(centerTileX, centerTileY) {
+  // Clear existing tiles
+  clearTileGrid();
+  
+  // Store center tile coordinates
+  centerTile = { tileX: centerTileX, tileY: centerTileY };
+  
+  // Create 3x3 grid of tiles (-1 to +1 relative to center)
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const tileX = centerTileX + dx;
+      const tileY = centerTileY + dy;
+      const tileKey = `${tileX},${tileY}`;
+      
+      const tileData = createTilePlane(tileX, tileY, dx, dy);
+      tileGrid.set(tileKey, {
+        ...tileData,
+        tileX,
+        tileY,
+        relativeX: dx,
+        relativeY: dy
+      });
+    }
+  }
+}
+
+function clearTileGrid() {
+  // Remove all existing tile planes from scene
+  tileGrid.forEach(({ plane }) => {
+    scene.remove(plane);
+    plane.geometry.dispose();
+    plane.material.dispose();
+  });
+  tileGrid.clear();
+}
+
+function loadTileGridTextures(lat, lon) {
   const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
+  
   // Store pixel offsets for positioning
   currentPixelOffsets = { pixelX, pixelY };
-  // Update plane position if it exists
-  if (plane) {
-    // Note: X-axis is flipped due to horizontal texture flip, so we reverse the X calculation
-    const offsetX = pixelX - TILE_SIZE/2; // user position - center plane (flipped)
-    const offsetZ = TILE_SIZE/2 - pixelY; // center plane - user position
-    plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
-  }
+  
+  // Create the tile grid first
+  createTileGrid(tileX, tileY);
+  
+  // Load textures for all tiles in the grid
+  tileGrid.forEach(({ material, tileX: tileTileX, tileY: tileTileY }, tileKey) => {
+    loadSingleTileTexture(tileTileX, tileTileY, material);
+  });
+  
+  console.log(`Loading 3x3 tile grid centered at ${tileX},${tileY} with pixel offsets:`, pixelX, pixelY);
+}
+
+function loadSingleTileTexture(tileX, tileY, material) {
   const url = `https://wplace-proxy.darktorin.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
   const loader = new THREE.TextureLoader();
   loader.crossOrigin = 'anonymous';
+  
   loader.load(
     url,
     (texture) => {
@@ -277,25 +337,43 @@ function loadTileTexture(lat, lon) {
       texture.repeat.x = -1;
       texture.offset.x = 1;
       
-      planeMat.map = texture;
-      planeMat.color.set(0xffffff);
-      planeMat.transparent = true;
-      planeMat.opacity = 0.9;
-      planeMat.needsUpdate = true;
-      console.log('Tile texture loaded with pixel offsets:', pixelX, pixelY);
+      material.map = texture;
+      material.color.set(0xffffff);
+      material.transparent = true;
+      material.opacity = 0.9;
+      material.needsUpdate = true;
+      console.log(`Tile texture loaded for ${tileX},${tileY}`);
     },
     undefined,
-    (err) => console.warn('Failed to load tile texture', err)
+    (err) => console.warn(`Failed to load tile texture for ${tileX},${tileY}:`, err)
   );
 }
 
 function recenterSky() {
-  if (!plane) return;
-  plane.rotation.set(-Math.PI / 2, 0, 0);
-  // Reset plane to directly above camera (at origin)
-  plane.position.set(0, SKY_HEIGHT, 0);
+  if (tileGrid.size === 0) return;
   
+  // Reset camera position
   camera.position.set(0, 0, 0);
+  
+  // Reposition all tiles based on current pixel offsets
+  tileGrid.forEach(({ plane, relativeX, relativeY }) => {
+    let offsetX, offsetZ;
+    
+    if (relativeX === 0 && relativeY === 0) {
+      // Center tile - apply user pixel offset
+      offsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
+      offsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
+    } else {
+      // Adjacent tile - position relative to center tile
+      const centerOffsetX = currentPixelOffsets.pixelX - TILE_SIZE/2;
+      const centerOffsetZ = TILE_SIZE/2 - currentPixelOffsets.pixelY;
+      offsetX = centerOffsetX + (relativeX * TILE_SIZE);
+      offsetZ = centerOffsetZ + (relativeY * TILE_SIZE);
+    }
+    
+    plane.position.set(offsetX, SKY_HEIGHT, offsetZ);
+    plane.rotation.set(-Math.PI / 2, 0, 0);
+  });
   
   // Also recenter camera rotation if in desktop mode
   if (!hasDeviceOrientation) {
@@ -368,11 +446,8 @@ startBtn.addEventListener('click', async () => {
       const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
       currentPixelOffsets = { pixelX, pixelY };
       
-      // Now create the plane with correct positioning
-      if (!plane) createSkyPlane();
-      
-      // Load the texture
-      loadTileTexture(lat, lon);
+      // Load the tile grid with textures
+      loadTileGridTextures(lat, lon);
 
       startBtn.textContent = 'Recenter Sky';
       Object.assign(startBtn.style, {
