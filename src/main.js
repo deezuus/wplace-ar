@@ -490,12 +490,23 @@ const ZOOM_LEVEL = 11;
 const TILE_SIZE = 1000;
 
 const FALLBACK = { lat: 43.642567, lon: -79.387054 };
+
+function showFallbackLocationAlert() {
+  alert('GPS location access is not available. \n\nThe app will use a default location instead.  \n\nIf you\'re on an embedded browser in Discord for example, please switch to a main browser for GPS functionality.');
+}
+
 function getLatLonOnce() {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(FALLBACK);
+    if (!navigator.geolocation) {
+      showFallbackLocationAlert();
+      return resolve(FALLBACK);
+    }
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
-      () => resolve(FALLBACK),
+      () => {
+        showFallbackLocationAlert();
+        resolve(FALLBACK);
+      },
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
     );
   });
@@ -527,7 +538,7 @@ function createAlphaFogMaterial() {
       // Custom fog calculation for alpha fading
       float depth = gl_FragCoord.z / gl_FragCoord.w;
       float fogFactor = smoothstep(customFogNear, customFogFar, depth);
-      gl_FragColor.a *= (0.7 - fogFactor);
+      gl_FragColor.a *= (0.8 - fogFactor);
     `;
 
     // Insert the fog calculation before the end of the fragment shader
