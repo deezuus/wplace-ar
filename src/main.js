@@ -575,7 +575,7 @@ function loadTileGridTextures(lat, lon) {
 }
 
 function loadSingleTileTexture(tileX, tileY, material) {
-  const url = `https://wplace-proxy.darktorin.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
+  const url = `https://wplace-proxy.deezus.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
   const loader = new THREE.TextureLoader();
   loader.crossOrigin = 'anonymous';
   
