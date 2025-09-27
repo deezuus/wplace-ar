@@ -1,6 +1,6 @@
 /**
  * wPlace AR Viewer - Main Application
- * 
+ * TODO: change this into a AGENTS.MD architecture to test it out
  * A web-based augmented reality application that overlays r/place-style tile data
  * from the sky above the user's current location. Uses motion permission detection
  * to automatically switch between device orientation (mobile) and mouse controls (desktop).
@@ -303,10 +303,23 @@ async function ensureMotionPermission() {
   return granted;
 }
 
+// TODO: break up this file into smaller files this shit is so hard to read after like a month
+// ---------- GPS override system ----------
+let gpsOverride = null; // { lat: number, lon: number } or null for real GPS
+let currentLocation = null; // Store current actual location for display
+let selectedLocation = null; // Store location selected on map
+
+// ---------- Map system ----------
+let locationMap = null; // Leaflet map instance
+let locationMarker = null; // Marker for selected location
+
 // ---------- UI element references (to be set after DOM loads) ----------
 let startScreen, arInterface, startBtn;
 let compassIndicator, compassNeedle, compassText;
-let photoBtn;
+let photoBtn, gpsBtn;
+let gpsModal, gpsModalClose, gpsLatInput, gpsLonInput;
+let gpsUseCurrent, gpsApply, currentCoordsDisplay;
+let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
 
 // Initialize UI elements when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -317,15 +330,237 @@ document.addEventListener('DOMContentLoaded', () => {
   compassNeedle = document.querySelector('.compass-needle');
   compassText = document.querySelector('.compass-text');
   photoBtn = document.getElementById('photo-btn');
+  gpsBtn = document.getElementById('gps-btn');
+  
+  // GPS Modal elements
+  gpsModal = document.getElementById('gps-modal');
+  gpsModalClose = document.getElementById('gps-modal-close');
+  gpsLatInput = document.getElementById('gps-lat');
+  gpsLonInput = document.getElementById('gps-lon');
+  gpsUseCurrent = document.getElementById('gps-use-current');
+  gpsApply = document.getElementById('gps-apply');
+  currentCoordsDisplay = document.getElementById('current-coords');
+  toggleManual = document.getElementById('toggle-manual');
+  manualInputs = document.getElementById('manual-inputs');
+  applyManual = document.getElementById('apply-manual');
+  selectedCoordsDisplay = document.getElementById('selected-coords');
   
   // All UI elements are now properly initialized
   
   // Add event listeners
   if (startBtn) startBtn.addEventListener('click', startAR);
   if (photoBtn) photoBtn.addEventListener('click', capturePhoto);
+  if (gpsBtn) gpsBtn.addEventListener('click', openGPSModal);
+  if (gpsModalClose) gpsModalClose.addEventListener('click', closeGPSModal);
+  if (gpsUseCurrent) gpsUseCurrent.addEventListener('click', useCurrentGPS);
+  if (gpsApply) gpsApply.addEventListener('click', applySelectedLocation);
+  if (toggleManual) toggleManual.addEventListener('click', toggleManualInput);
+  if (applyManual) applyManual.addEventListener('click', applyManualCoordinates);
+  
+  // Close modal when clicking outside
+  if (gpsModal) {
+    gpsModal.addEventListener('click', (e) => {
+      if (e.target === gpsModal) closeGPSModal();
+    });
+  }
 });
 
 
+
+// ---------- Map functionality ----------
+function initializeMap() {
+  if (locationMap) return; // Already initialized
+  
+  const mapContainer = document.getElementById('location-map');
+  if (!mapContainer) return;
+  
+  // Get initial location for map center
+  const initialLat = gpsOverride?.lat || currentLocation?.lat || fallback.lat;
+  const initialLon = gpsOverride?.lon || currentLocation?.lon || fallback.lon;
+  
+  // Initialize Leaflet map
+  locationMap = L.map('location-map').setView([initialLat, initialLon], 10);
+  
+  // Add OpenStreetMap tiles with dark theme
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(locationMap);
+  
+  // Add marker for selected location
+  locationMarker = L.marker([initialLat, initialLon], {
+    draggable: true
+  }).addTo(locationMap);
+  
+  // Set initial selected location
+  selectedLocation = { lat: initialLat, lon: initialLon };
+  updateSelectedLocationDisplay();
+  
+  // Handle map clicks
+  locationMap.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lon = e.latlng.lng;
+    
+    // Update marker position
+    locationMarker.setLatLng([lat, lon]);
+    
+    // Update selected location
+    selectedLocation = { lat, lon };
+    updateSelectedLocationDisplay();
+    
+    console.log('Map clicked:', selectedLocation);
+  });
+  
+  // Handle marker drag
+  locationMarker.on('dragend', function(e) {
+    const position = e.target.getLatLng();
+    const lat = position.lat;
+    const lon = position.lng;
+    
+    // Update selected location
+    selectedLocation = { lat, lon };
+    updateSelectedLocationDisplay();
+    
+    console.log('Marker dragged:', selectedLocation);
+  });
+  
+  // Invalidate size after modal is shown (fixes display issues)
+  setTimeout(() => {
+    if (locationMap) {
+      locationMap.invalidateSize();
+    }
+  }, 100);
+}
+
+function updateSelectedLocationDisplay() {
+  if (!selectedCoordsDisplay || !selectedLocation) return;
+  
+  selectedCoordsDisplay.textContent = 
+    `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lon.toFixed(6)}`;
+}
+
+function toggleManualInput() {
+  if (!manualInputs) return;
+  
+  const isHidden = manualInputs.classList.contains('hidden');
+  
+  if (isHidden) {
+    manualInputs.classList.remove('hidden');
+    toggleManual.textContent = '🗺️ Use Map';
+    
+    // Pre-fill with selected location
+    if (selectedLocation) {
+      gpsLatInput.value = selectedLocation.lat;
+      gpsLonInput.value = selectedLocation.lon;
+    }
+  } else {
+    manualInputs.classList.add('hidden');
+    toggleManual.textContent = '📝 Manual Input';
+  }
+}
+
+function applyManualCoordinates() {
+  const lat = parseFloat(gpsLatInput.value);
+  const lon = parseFloat(gpsLonInput.value);
+  
+  // Validate inputs
+  if (isNaN(lat) || isNaN(lon)) {
+    alert('Please enter valid latitude and longitude values.');
+    return;
+  }
+  
+  if (lat < -90 || lat > 90) {
+    alert('Latitude must be between -90 and 90 degrees.');
+    return;
+  }
+  
+  if (lon < -180 || lon > 180) {
+    alert('Longitude must be between -180 and 180 degrees.');
+    return;
+  }
+  
+  // Update map and marker
+  if (locationMap && locationMarker) {
+    locationMap.setView([lat, lon], locationMap.getZoom());
+    locationMarker.setLatLng([lat, lon]);
+  }
+  
+  // Update selected location
+  selectedLocation = { lat, lon };
+  updateSelectedLocationDisplay();
+  
+  // Hide manual inputs
+  manualInputs.classList.add('hidden');
+  toggleManual.textContent = '📝 Manual Input';
+  
+  console.log('Manual coordinates applied:', selectedLocation);
+}
+
+// ---------- GPS modal functionality ----------
+function openGPSModal() {
+  if (!gpsModal) return;
+  
+  gpsModal.classList.remove('hidden');
+  
+  // Initialize map after modal is shown
+  setTimeout(() => {
+    initializeMap();
+  }, 50);
+}
+
+function closeGPSModal() {
+  if (!gpsModal) return;
+  gpsModal.classList.add('hidden');
+}
+
+function updateCurrentLocationDisplay() {
+  if (!currentCoordsDisplay) return;
+  
+  if (gpsOverride) {
+    currentCoordsDisplay.textContent = `Override: ${gpsOverride.lat.toFixed(6)}, ${gpsOverride.lon.toFixed(6)}`;
+  } else if (currentLocation) {
+    currentCoordsDisplay.textContent = `GPS: ${currentLocation.lat.toFixed(6)}, ${currentLocation.lon.toFixed(6)}`;
+  } else {
+    currentCoordsDisplay.textContent = 'Loading...';
+  }
+}
+
+function useCurrentGPS() {
+  // Clear override and refresh with real GPS
+  gpsOverride = null;
+  selectedLocation = null;
+  console.log('GPS override cleared - using real GPS location');
+  
+  // Update button text to show we're using real GPS
+  if (gpsBtn) {
+    gpsBtn.textContent = '🌍 GPS Location';
+  }
+  
+  closeGPSModal();
+  refreshLocationAndTiles();
+}
+
+function applySelectedLocation() {
+  if (!selectedLocation) {
+    alert('Please select a location on the map first.');
+    return;
+  }
+  
+  // Set override to selected location
+  gpsOverride = { 
+    lat: selectedLocation.lat, 
+    lon: selectedLocation.lon 
+  };
+  console.log('GPS override set to selected location:', gpsOverride);
+  
+  // Update button text to show we're using override
+  if (gpsBtn) {
+    gpsBtn.textContent = '🌍 Override';
+  }
+  
+  closeGPSModal();
+  refreshLocationAndTiles();
+}
 
 // ---------- photo capture functionality ----------
 function capturePhoto() {
@@ -395,18 +630,58 @@ function showFallbackLocationAlert() {
 
 function getLatLonOnce() {
   return new Promise((resolve) => {
+    // If GPS override is active, use it immediately
+    if (gpsOverride) {
+      console.log('Using GPS override:', gpsOverride);
+      resolve(gpsOverride);
+      return;
+    }
+    
+    // Otherwise get real GPS location
     if (!navigator.geolocation) {
       showFallbackLocationAlert();
-      return resolve(FALLBACK);
+      const location = FALLBACK;
+      currentLocation = location;
+      return resolve(location);
     }
     navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      (p) => {
+        const location = { lat: p.coords.latitude, lon: p.coords.longitude };
+        currentLocation = location;
+        console.log('Real GPS location:', location);
+        resolve(location);
+      },
       () => {
         showFallbackLocationAlert();
-        resolve(FALLBACK);
+        const location = FALLBACK;
+        currentLocation = location;
+        resolve(location);
       },
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
     );
+  });
+}
+
+// Function to refresh location and reload tiles
+function refreshLocationAndTiles() {
+  console.log('Refreshing location and tiles...');
+  
+  getLatLonOnce().then(({ lat, lon }) => {
+    console.log(`Refreshing tiles for location: ${lat}, ${lon}`);
+    
+    // Update pixel offsets and reload tile grid
+    const { tileX, tileY, pixelX, pixelY } = latLonToTile(lat, lon, ZOOM_LEVEL, TILE_SIZE);
+    currentPixelOffsets = { pixelX, pixelY };
+    
+    // Load new tile grid with textures
+    loadTileGridTextures(lat, lon);
+    
+    // Update current location display if modal is open
+    updateCurrentLocationDisplay();
+    
+    console.log('Tiles refreshed successfully');
+  }).catch(error => {
+    console.error('Failed to refresh tiles:', error);
   });
 }
 
@@ -575,7 +850,7 @@ function loadTileGridTextures(lat, lon) {
 }
 
 function loadSingleTileTexture(tileX, tileY, material) {
-  const url = `https://wplace-proxy.darktorin.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
+  const url = `https://wplace-proxy.deezus.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
   const loader = new THREE.TextureLoader();
   loader.crossOrigin = 'anonymous';
   

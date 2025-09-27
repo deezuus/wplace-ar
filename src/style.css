@@ -2,15 +2,43 @@
 
 /* CSS Variables */
 :root {
-  --font-primary: Arial, sans-serif;
-  --color-bg-overlay: rgba(0, 0, 0, 0.8);
-  --color-bg-modal: rgb(14, 14, 14);
-  --color-text-primary: #fff;
-  --color-text-secondary: #ccc;
-  --color-text-muted: #aaa;
-  --color-border: rgba(255, 255, 255, 0.2);
+  --font-primary: ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+  --color-bg-overlay: rgb(193 193 193 / 80%);
+  --color-bg-modal: oklch(100% 0 0);
+  --color-text-primary: oklch(41.886% .053 255.824);
+  --color-text-secondary: oklch(41.886% .053 255.824);
+  --color-text-muted: oklch(41.886% .053 255.824);
+  --color-border: rgba(41, 47, 51, 0.2);
   --color-shadow: rgba(0, 0, 0, 0.3);
+  --btn-bg: #ededed;
+  --btn-hover-bg: color-mix(in oklab, var(--btn-bg), #000 7%);
   --transition-fast: 0.2s ease;
+  --box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  
+  /* Secondary colors */
+  --color-red-400: oklch(70.4% .191 22.216);
+  --color-red-500: oklch(63.7% .237 25.331);
+  --color-red-600: oklch(57.7% .245 27.325);
+  --color-orange-500: oklch(70.5% .213 47.604);
+  --color-amber-500: oklch(76.9% .188 70.08);
+  --color-amber-600: oklch(66.6% .179 58.318);
+  --color-yellow-400: oklch(85.2% .199 91.936);
+  --color-yellow-500: oklch(79.5% .184 86.047);
+  --color-lime-500: oklch(76.8% .233 130.85);
+  --color-green-500: oklch(72.3% .219 149.579);
+  --color-emerald-500: oklch(69.6% .17 162.48);
+  --color-teal-500: oklch(70.4% .14 182.503);
+  --color-cyan-500: oklch(71.5% .143 215.221);
+  --color-sky-500: oklch(68.5% .169 237.323);
+  --color-blue-500: oklch(62.3% .214 259.815);
+  --color-blue-600: oklch(54.6% .245 262.881);
+  --color-blue-800: oklch(42.4% .199 265.638);
+  --color-indigo-500: oklch(58.5% .233 277.117);
+  --color-violet-500: oklch(60.6% .25 292.717);
+  --color-purple-500: oklch(62.7% .265 303.9);
+  --color-fuchsia-500: oklch(66.7% .295 322.15);
+  --color-pink-500: oklch(65.6% .241 354.308);
+  --color-rose-500: oklch(64.5% .246 16.439);
 }
 
 /* Base Styles */
@@ -70,7 +98,7 @@ main {
   margin-bottom: 20px;
   border-radius: 16px;
   background: var(--color-bg-modal);
-  box-shadow: 0 8px 32px var(--color-shadow);
+  box-shadow: var(--box-shadow);
 }
 
 .permission-explanation h2 {
@@ -93,7 +121,6 @@ main {
   color: var(--color-text-muted);
   font-size: 14px;
   font-family: var(--font-primary);
-  font-weight: bold;
 }
 
 .permission-item {
@@ -118,16 +145,17 @@ main {
   border-radius: 14px;
   border: none;
   font-size: 18px;
-  background: #111;
+  background: var(--btn-bg);
   color: var(--color-text-primary);
   cursor: pointer;
   font-family: var(--font-primary);
   font-weight: bold;
   transition: background var(--transition-fast);
+  box-shadow: var(--box-shadow);
 }
 
 .primary-button:hover {
-  background: #333;
+  background: var(--btn-hover-bg);
 }
 
 /* ===== AR Interface ===== */
@@ -143,11 +171,12 @@ main {
   right: 20px;
   width: 100px;
   height: 100px;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--color-bg-modal);
   border: 2px solid var(--color-text-primary);
   border-radius: 50%;
   pointer-events: auto;
   font-family: var(--font-primary);
+  box-shadow: var(--box-shadow);
 }
 
 .compass.hidden {
@@ -203,6 +232,31 @@ main {
 .compass-s { bottom: 8px; left: 44px; }
 .compass-w { top: 44px; left: 8px; }
 
+/* ===== GPS Button ===== */
+.gps-button {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 154px;
+  height: 48px;
+  border-radius: 24px;
+  border: none;
+  font-size: 14px;
+  background: var(--btn-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: var(--font-primary);
+  font-weight: bold;
+  box-shadow: var(--box-shadow);
+  transition: all var(--transition-fast);
+  pointer-events: auto;
+}
+
+.gps-button:hover {
+  background: var(--btn-hover-bg);
+  transform: scale(1.05);
+}
+
 /* ===== Photo Button ===== */
 .photo-button {
   position: fixed;
@@ -212,20 +266,330 @@ main {
   width: 140px;
   height: 48px;
   border-radius: 24px;
-  border: 2px solid var(--color-text-primary);
+  border: none;
   font-size: 16px;
-  background: var(--color-bg-overlay);
+  background: var(--btn-bg);
   color: var(--color-text-primary);
   cursor: pointer;
   font-family: var(--font-primary);
   font-weight: bold;
-  box-shadow: 0 4px 12px var(--color-shadow);
+  box-shadow: var(--box-shadow);
   transition: all var(--transition-fast);
   pointer-events: auto;
 }
 
 .photo-button:hover {
-  background: rgba(255, 255, 255, 0.9);
-  color: #000;
+  background: var(--btn-hover-bg);
   transform: translateX(-50%) scale(1.05);
+}
+
+/* ===== Modal System ===== */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.modal.hidden {
+  display: none !important;
+}
+
+.modal-content {
+  background: var(--color-bg-modal);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--color-border);
+}
+
+.modal-content.map-modal {
+  max-width: 600px;
+  max-height: 85vh;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 0 20px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  font-family: var(--font-primary);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+.modal-body {
+  padding: 0 20px 20px 20px;
+}
+
+.modal-description {
+  margin: 0 0 20px 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  font-family: var(--font-primary);
+}
+
+.input-group {
+  margin-bottom: 16px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: bold;
+  font-family: var(--font-primary);
+}
+
+.input-group input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-family: var(--font-primary);
+  transition: border-color var(--transition-fast);
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.input-group input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.current-location {
+  margin: 20px 0;
+  padding: 12px;
+  background: var(--color-bg-modal);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--box-shadow);
+}
+
+.current-location p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-family: var(--font-primary);
+}
+
+.current-location p:first-child {
+  color: var(--color-text-primary);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  position: relative;
+}
+
+.secondary-button {
+  flex: 1;
+  height: 44px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  background: var(--btn-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-family: var(--font-primary);
+  font-weight: bold;
+  transition: all var(--transition-fast);
+  box-shadow: var(--box-shadow);
+}
+
+.secondary-button:hover {
+  background: var(--btn-hover-bg);
+}
+
+.modal-actions .primary-button {
+  flex: 1;
+  height: 44px;
+  border-radius: 8px;
+  margin: 0;
+  width: auto;
+  max-width: none;
+}
+
+.modal-actions .primary-button.large {
+  height: 52px;
+  font-size: 16px;
+  font-weight: bold;
+  flex: none;
+  width: 70%;
+  margin-right: auto;
+}
+
+.reset-button {
+  background: var(--btn-bg);
+  border: none;
+  color: var(--color-text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-primary);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  flex: none;
+  height: 36px;
+  min-width: 70px;
+  box-shadow: var(--box-shadow);
+}
+
+.reset-button:hover {
+  background: var(--btn-hover-bg);
+  transform: scale(1.05);
+}
+
+/* ===== Map Picker Styles ===== */
+.location-map {
+  width: 100%;
+  height: 300px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: var(--box-shadow);
+}
+
+.coordinate-section {
+  margin-bottom: 20px;
+}
+
+.manual-input-toggle {
+  text-align: center;
+  margin: 12px 0;
+}
+
+.toggle-button {
+  background: var(--btn-bg);
+  border: none;
+  color: var(--color-text-primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-primary);
+  transition: all var(--transition-fast);
+  box-shadow: var(--box-shadow);
+}
+
+.toggle-button:hover {
+  background: var(--btn-hover-bg);
+}
+
+.manual-inputs {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--color-bg-modal);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--box-shadow);
+}
+
+.manual-inputs.hidden {
+  display: none;
+}
+
+.input-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.input-row .input-group {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+#selected-coords {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* Leaflet map customizations */
+.leaflet-container {
+  background: #1a1a1a !important;
+}
+
+.leaflet-tile {
+  filter: brightness(0.8) contrast(1.1);
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+}
+
+.leaflet-control-zoom a {
+  background: var(--color-bg-overlay) !important;
+  color: var(--color-text-primary) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--color-bg-modal) !important;
+  color: var(--color-text-primary) !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--color-bg-modal) !important;
 }
