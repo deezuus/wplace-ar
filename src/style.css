@@ -597,3 +597,9 @@ main {
 .leaflet-popup-tip {
   background: var(--color-bg-modal) !important;
 }
+
+
+#start-btn {
+  background: var(--color-blue-500);
+  color: rgb(255, 255, 255);
+}

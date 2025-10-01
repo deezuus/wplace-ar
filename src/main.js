@@ -686,7 +686,7 @@ function refreshLocationAndTiles() {
 }
 
 // ---------- tile grid system (3x3 grid with adjacent tiles) ----------
-const SKY_HEIGHT = 100; // how high the plane floats above you
+const SKY_HEIGHT = 200; // how high the plane floats above you
 let tileGrid = new Map(); // Map to store all tile planes by key "x,y"
 let centerTile = { tileX: 0, tileY: 0 }; // Current center tile coordinates
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
@@ -864,7 +864,7 @@ function loadSingleTileTexture(tileX, tileY, material) {
       material.map = texture;
       material.color.set(0xffffff);
       material.transparent = true;
-      material.opacity = 0.9;
+      material.opacity = 0.5;
       material.needsUpdate = true;
       console.log(`Tile texture loaded for ${tileX},${tileY}`);
     },
