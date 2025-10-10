@@ -320,6 +320,7 @@ let photoBtn, gpsBtn;
 let gpsModal, gpsModalClose, gpsLatInput, gpsLonInput;
 let gpsUseCurrent, gpsApply, currentCoordsDisplay;
 let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
+let heightSlider, heightValue;
 
 // Initialize UI elements when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -345,6 +346,10 @@ document.addEventListener('DOMContentLoaded', () => {
   applyManual = document.getElementById('apply-manual');
   selectedCoordsDisplay = document.getElementById('selected-coords');
   
+  // Height control elements
+  heightSlider = document.getElementById('height-slider');
+  heightValue = document.getElementById('height-value');
+  
   // All UI elements are now properly initialized
   
   // Add event listeners
@@ -356,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (gpsApply) gpsApply.addEventListener('click', applySelectedLocation);
   if (toggleManual) toggleManual.addEventListener('click', toggleManualInput);
   if (applyManual) applyManual.addEventListener('click', applyManualCoordinates);
+  if (heightSlider) heightSlider.addEventListener('input', updatePlaneHeight);
   
   // Close modal when clicking outside
   if (gpsModal) {
@@ -686,7 +692,7 @@ function refreshLocationAndTiles() {
 }
 
 // ---------- tile grid system (3x3 grid with adjacent tiles) ----------
-const SKY_HEIGHT = 200; // how high the plane floats above you
+let SKY_HEIGHT = 200; // how high the plane floats above you (mutable for slider control)
 let tileGrid = new Map(); // Map to store all tile planes by key "x,y"
 let centerTile = { tileX: 0, tileY: 0 }; // Current center tile coordinates
 let currentPixelOffsets = { pixelX: 0, pixelY: 0 }; // store current pixel offsets
@@ -871,6 +877,25 @@ function loadSingleTileTexture(tileX, tileY, material) {
     undefined,
     (err) => console.warn(`Failed to load tile texture for ${tileX},${tileY}:`, err)
   );
+}
+
+// ---------- height control functionality ----------
+function updatePlaneHeight() {
+  if (!heightSlider || !heightValue) return;
+  
+  // Get new height value from slider
+  const newHeight = parseInt(heightSlider.value);
+  SKY_HEIGHT = newHeight;
+  
+  // Update the display value
+  heightValue.textContent = `${newHeight}m`;
+  
+  // Update all tile plane positions
+  tileGrid.forEach(({ plane, relativeX, relativeY }) => {
+    plane.position.y = SKY_HEIGHT;
+  });
+  
+  console.log(`Plane height updated to ${SKY_HEIGHT} units`);
 }
 
 
