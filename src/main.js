@@ -321,6 +321,7 @@ let gpsModal, gpsModalClose, gpsLatInput, gpsLonInput;
 let gpsUseCurrent, gpsApply, currentCoordsDisplay;
 let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
 let heightSlider, heightValue;
+let interactionPrompt, promptText;
 
 // Initialize UI elements when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -349,6 +350,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Height control elements
   heightSlider = document.getElementById('height-slider');
   heightValue = document.getElementById('height-value');
+  
+  // Interaction prompt elements
+  interactionPrompt = document.getElementById('interaction-prompt');
+  promptText = document.querySelector('.prompt-text');
   
   // All UI elements are now properly initialized
   
@@ -879,6 +884,39 @@ function loadSingleTileTexture(tileX, tileY, material) {
   );
 }
 
+// ---------- interaction prompt functionality ----------
+function showInteractionPrompt(isMobile) {
+  if (!interactionPrompt || !promptText) return;
+  
+  // Set appropriate text based on device type
+  if (isMobile) {
+    promptText.textContent = '📱 Rotate your device to look around';
+  } else {
+    promptText.textContent = '🖱️ Click and drag to look around';
+  }
+  
+  // Show the prompt
+  interactionPrompt.classList.remove('hidden');
+  
+  // Trigger fade-in animation
+  setTimeout(() => {
+    interactionPrompt.classList.add('show');
+  }, 50);
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    // Fade out
+    interactionPrompt.classList.remove('show');
+    
+    // Remove from DOM after fade animation completes
+    setTimeout(() => {
+      interactionPrompt.classList.add('hidden');
+    }, 500);
+  }, 5000);
+  
+  console.log('Interaction prompt shown:', isMobile ? 'mobile' : 'desktop');
+}
+
 // ---------- height control functionality ----------
 function updatePlaneHeight() {
   if (!heightSlider || !heightValue) return;
@@ -936,7 +974,7 @@ async function startAR() {
       console.log('Using desktop mouse look controls');
       
       // Show alert for desktop users
-      alert('This AR experience is best enjoyed on mobile devices with motion sensors.\n\nOn desktop, you can still look around by clicking and dragging to explore!');
+      alert('This AR experience is best enjoyed on mobile devices with motion sensors.');
       
       // Show compass indicator for desktop (default north orientation)
       updateCompassIndicator(0);
@@ -978,6 +1016,9 @@ async function startAR() {
       startScreen.classList.add('hidden');
       arInterface.classList.remove('hidden');
       console.log('Switched to AR interface');
+      
+      // Show interaction prompt
+      showInteractionPrompt(isActuallyMobile);
     } else {
       // Mobile device without motion permission - just hide start screen and show button change
       console.log('Mobile device without motion permission - staying on start screen');

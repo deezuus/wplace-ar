@@ -168,6 +168,55 @@ main {
   z-index: 1000;
 }
 
+/* ===== Interaction Prompt ===== */
+.interaction-prompt {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  padding: 24px 40px;
+  border-radius: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.interaction-prompt.show {
+  opacity: 1;
+}
+
+.interaction-prompt.hidden {
+  display: none;
+}
+
+.prompt-text {
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  font-family: var(--font-primary);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .interaction-prompt {
+    padding: 20px 36px;
+    margin: 0 20px;
+  }
+  
+  .prompt-text {
+    font-size: 18px;
+    white-space: normal;
+    line-height: 1.4;
+  }
+}
+
 /* ===== Compass ===== */
 .compass {
   position: fixed;
