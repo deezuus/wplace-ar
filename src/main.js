@@ -321,6 +321,7 @@ let gpsModal, gpsModalClose, gpsLatInput, gpsLonInput;
 let gpsUseCurrent, gpsApply, currentCoordsDisplay;
 let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
 let heightSlider, heightValue;
+let opacitySlider, opacityValue;
 let interactionPrompt, promptText;
 
 // Initialize UI elements when DOM is ready
@@ -351,6 +352,10 @@ document.addEventListener('DOMContentLoaded', () => {
   heightSlider = document.getElementById('height-slider');
   heightValue = document.getElementById('height-value');
   
+  // Opacity control elements
+  opacitySlider = document.getElementById('opacity-slider');
+  opacityValue = document.getElementById('opacity-value');
+  
   // Interaction prompt elements
   interactionPrompt = document.getElementById('interaction-prompt');
   promptText = document.querySelector('.prompt-text');
@@ -367,6 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (toggleManual) toggleManual.addEventListener('click', toggleManualInput);
   if (applyManual) applyManual.addEventListener('click', applyManualCoordinates);
   if (heightSlider) heightSlider.addEventListener('input', updatePlaneHeight);
+  if (opacitySlider) opacitySlider.addEventListener('input', updatePlaneOpacity);
   
   // Close modal when clicking outside
   if (gpsModal) {
@@ -934,6 +940,26 @@ function updatePlaneHeight() {
   });
   
   console.log(`Plane height updated to ${SKY_HEIGHT} units`);
+}
+
+// ---------- opacity control functionality ----------
+function updatePlaneOpacity() {
+  if (!opacitySlider || !opacityValue) return;
+  
+  // Get new opacity value from slider (0-100)
+  const opacityPercent = parseInt(opacitySlider.value);
+  const opacity = opacityPercent / 100;
+  
+  // Update the display value
+  opacityValue.textContent = `${opacityPercent}%`;
+  
+  // Update all tile plane material opacity
+  tileGrid.forEach(({ material }) => {
+    material.opacity = opacity;
+    material.needsUpdate = true;
+  });
+  
+  console.log(`Plane opacity updated to ${opacityPercent}%`);
 }
 
 
