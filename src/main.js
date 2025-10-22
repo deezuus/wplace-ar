@@ -8,7 +8,6 @@
  * FEATURES:
  * - Camera feed background using WebRTC getUserMedia
  * - Device orientation tracking (mobile) with adaptive smoothing
- * - Compass-based tile grid rotation aligned with real-world directions
  * - Mouse look controls (desktop) with pitch/yaw rotation
  * - Geolocation-based tile loading from wPlace proxy API
  * - Sky-positioned plane displaying tile texture at configurable height
@@ -20,24 +19,19 @@
  * - Built with Three.js WebGL renderer with grouped tile management
  * - Uses Mercator projection for lat/lon to tile coordinate conversion
  * - Adaptive quaternion smoothing for natural device orientation tracking
- * - Initial compass heading detection for geographic alignment
- * - Grouped tile rotation system for accurate cardinal direction mapping
  * - Precise pixel-level positioning within tiles
  * - 80° FOV camera for immersive AR experience
  * 
  * CONTROLS:
- * - Mobile: Device orientation (gyroscope/accelerometer) + initial compass orientation
+ * - Mobile: Device orientation (gyroscope/accelerometer)
  * - Desktop: Mouse drag to look around
  * - "Start AR" button initializes camera and orientation
-
  * 
  * CONFIGURATION:
  * - ZOOM_LEVEL: Map zoom level for tile resolution (default: 11)
  * - TILE_SIZE: Size of each tile in 3D units (default: 1000)
  * - SKY_HEIGHT: Height of plane above user (default: 100 units)
  * - TAU_BASE/TAU_SLOW: Smoothing time constants for orientation tracking
- * - DEBUG_SHOW_COMPASS: Show/hide compass indicator (default: true)
- * - Initial compass heading captured for geographic alignment
  */
 
 // main.js
@@ -149,108 +143,6 @@ function isSecure() {
          location.hostname === '127.0.0.1';
 }
 
-// ---------- compass/magnetometer tracking ----------
-let initialCompassHeading = 0; // Initial compass heading for north orientation (degrees 0-360)
-let hasCompassHeading = false; // Whether we have captured initial compass heading
-let currentCompassHeading = 0; // Current compass heading for indicator updates
-let compassTrackingActive = false; // Whether real-time compass tracking is active
-
-function normalizeCompassHeading(heading) {
-  // Normalize heading to 0-360 degrees
-  heading = heading % 360;
-  return heading < 0 ? heading + 360 : heading;
-}
-
-function getCompassDirection(heading) {
-  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-  const index = Math.round(heading / 22.5) % 16;
-  return directions[index];
-}
-
-function updateCompassIndicator(heading) {
-  if (!compassIndicator) return;
-  
-  // Show compass indicator only if debug variable is enabled
-  if (DEBUG_SHOW_COMPASS) {
-    compassIndicator.classList.remove('hidden');
-  } else {
-    compassIndicator.classList.add('hidden');
-  }
-  
-  // Update needle rotation (heading is clockwise from north)
-  compassNeedle.style.transform = `translateX(-50%) rotate(${heading}deg)`;
-  
-  // Update text display
-  const direction = getCompassDirection(heading);
-  compassText.textContent = `${Math.round(heading)}° ${direction}`;
-  
-  console.log(`Compass: ${Math.round(heading)}° ${direction}`);
-}
-
-function getCompassHeading(event) {
-  let heading = null;
-  
-  if (event.webkitCompassHeading !== undefined) {
-    // iOS: webkitCompassHeading gives us magnetic north (0-360)
-    heading = event.webkitCompassHeading;
-  } else if (event.alpha !== null) {
-    // Android: alpha gives us the rotation around the z-axis
-    // For Android, we need to convert alpha to compass heading
-    // alpha is 0-360 where 0 is north, but it's inverted from compass heading
-    heading = 360 - event.alpha;
-  }
-  
-  return heading !== null ? normalizeCompassHeading(heading) : null;
-}
-
-function onDeviceOrientationChange(event) {
-  const newHeading = getCompassHeading(event);
-  
-  if (newHeading !== null) {
-    // Capture initial heading for tile grid orientation (only once)
-    if (!hasCompassHeading) {
-      initialCompassHeading = newHeading;
-      hasCompassHeading = true;
-      console.log('Initial compass heading captured:', initialCompassHeading.toFixed(1), '°');
-      
-      // Check compass accuracy if available (Android feature)
-      if (event.webkitCompassAccuracy !== undefined) {
-        const accuracy = event.webkitCompassAccuracy;
-        if (accuracy < 0) {
-          console.warn('Compass needs calibration - wave device in figure-8 pattern');
-        }
-      }
-    }
-    
-    // Always update current heading for indicator (continuous tracking)
-    if (compassTrackingActive) {
-      currentCompassHeading = newHeading;
-      updateCompassIndicator(currentCompassHeading);
-    }
-  }
-}
-
-function captureInitialCompassHeading() {
-  if (!isMobileDevice()) {
-    console.log('Compass not available on desktop - using default north orientation');
-    // Show compass indicator with default north (0°) for desktop
-    updateCompassIndicator(0);
-    return false;
-  }
-  
-  try {
-    window.addEventListener('deviceorientationabsolute', onDeviceOrientationChange, true);
-    window.addEventListener('deviceorientation', onDeviceOrientationChange, true);
-    compassTrackingActive = true; // Enable continuous tracking
-    console.log('Started compass tracking...');
-    return true;
-  } catch (error) {
-    console.warn('Failed to access compass:', error);
-    // Show compass indicator with default north (0°) on error
-    updateCompassIndicator(0);
-    return false;
-  }
-}
 
 // Check if we're on a mobile device
 function isMobileDevice() {
@@ -315,13 +207,12 @@ let locationMarker = null; // Marker for selected location
 
 // ---------- UI element references (to be set after DOM loads) ----------
 let startScreen, arInterface, startBtn;
-let compassIndicator, compassNeedle, compassText;
-let photoBtn, gpsBtn;
+let photoBtn, gpsBtn, toggleUiBtn;
 let gpsModal, gpsModalClose, gpsLatInput, gpsLonInput;
 let gpsUseCurrent, gpsApply, currentCoordsDisplay;
 let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
-let heightSlider, heightValue;
-let opacitySlider, opacityValue;
+let heightSlider, heightValue, heightControl;
+let opacitySlider, opacityValue, opacityControl;
 let interactionPrompt, promptText;
 
 // Initialize UI elements when DOM is ready
@@ -329,11 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
   startScreen = document.getElementById('start-screen');
   arInterface = document.getElementById('ar-interface');
   startBtn = document.getElementById('start-btn');
-  compassIndicator = document.getElementById('compass-indicator');
-  compassNeedle = document.querySelector('.compass-needle');
-  compassText = document.querySelector('.compass-text');
   photoBtn = document.getElementById('photo-btn');
   gpsBtn = document.getElementById('gps-btn');
+  toggleUiBtn = document.getElementById('toggle-ui-btn');
   
   // GPS Modal elements
   gpsModal = document.getElementById('gps-modal');
@@ -351,10 +240,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // Height control elements
   heightSlider = document.getElementById('height-slider');
   heightValue = document.getElementById('height-value');
+  heightControl = document.getElementById('height-control');
   
   // Opacity control elements
   opacitySlider = document.getElementById('opacity-slider');
   opacityValue = document.getElementById('opacity-value');
+  opacityControl = document.getElementById('opacity-control');
   
   // Interaction prompt elements
   interactionPrompt = document.getElementById('interaction-prompt');
@@ -366,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (startBtn) startBtn.addEventListener('click', startAR);
   if (photoBtn) photoBtn.addEventListener('click', capturePhoto);
   if (gpsBtn) gpsBtn.addEventListener('click', openGPSModal);
+  if (toggleUiBtn) toggleUiBtn.addEventListener('click', toggleUIVisibility);
   if (gpsModalClose) gpsModalClose.addEventListener('click', closeGPSModal);
   if (gpsUseCurrent) gpsUseCurrent.addEventListener('click', useCurrentGPS);
   if (gpsApply) gpsApply.addEventListener('click', applySelectedLocation);
@@ -622,6 +514,39 @@ function capturePhoto() {
   }
 }
 
+// ---------- toggle UI visibility functionality ----------
+let isUIVisible = true; // Track UI visibility state
+
+function toggleUIVisibility() {
+  if (!toggleUiBtn) return;
+  
+  isUIVisible = !isUIVisible;
+  
+  // Elements to toggle
+  const elementsToToggle = [
+    gpsBtn,
+    photoBtn,
+    opacityControl,
+    heightControl
+  ];
+  
+  // Toggle visibility for each element
+  elementsToToggle.forEach(element => {
+    if (element) {
+      if (isUIVisible) {
+        element.style.display = '';
+      } else {
+        element.style.display = 'none';
+      }
+    }
+  });
+  
+  // Update button text
+  toggleUiBtn.textContent = isUIVisible ? 'Hide UI' : 'Show UI';
+  
+  console.log(`UI ${isUIVisible ? 'shown' : 'hidden'}`);
+}
+
 // ---------- geo → tile math ----------
 function latLonToTile(lat, lon, zoom, tileSize = 1000) {
   const x = (lon + 180) / 360;
@@ -635,9 +560,6 @@ function latLonToTile(lat, lon, zoom, tileSize = 1000) {
 }
 const ZOOM_LEVEL = 11;
 const TILE_SIZE = 1000;
-
-// Debug configuration
-const DEBUG_SHOW_COMPASS = false; // Set to false to hide compass display
 
 const FALLBACK = { lat: 43.642567, lon: -79.387054 };
 
@@ -823,12 +745,6 @@ function createTileGrid(centerTileX, centerTileY) {
     }
   }
   
-  // Apply compass rotation to align with real-world directions
-  if (tileGroup && hasCompassHeading) {
-    const compassRadians = (initialCompassHeading * Math.PI) / 180;
-    tileGroup.rotation.y = compassRadians;
-    console.log('Applied compass rotation:', initialCompassHeading.toFixed(1), '°');
-  }
 }
 
 function clearTileGrid() {
@@ -986,9 +902,6 @@ async function startAR() {
       console.log('Using mobile device orientation controls');
       controls = new DeviceOrientationControls(orientationProxy);
       controls.connect();
-      
-      // Capture initial compass heading for mobile devices
-      captureInitialCompassHeading();
     } else if (isActuallyMobile && !hasDeviceOrientation) {
       // Mobile device but no motion permission - show error
       console.log('Mobile device detected but no motion permission');
@@ -1001,9 +914,6 @@ async function startAR() {
       
       // Show alert for desktop users
       alert('This AR experience is best enjoyed on mobile devices with motion sensors.');
-      
-      // Show compass indicator for desktop (default north orientation)
-      updateCompassIndicator(0);
       
       // Start looking straight up (like mobile device)
       cameraRotationX = Math.PI / 2; // 90 degrees up
@@ -1081,10 +991,6 @@ renderer.setAnimationLoop((t) => {
     smoothQ.slerp(targetQ, alpha);
     camera.quaternion.copy(smoothQ);
   }
-  
-  // No real-time compass updates needed - using initial heading only
-  
-  // Desktop mode doesn't need updates in render loop - mouse events handle camera rotation
 
   renderer.render(scene, camera);
 });
