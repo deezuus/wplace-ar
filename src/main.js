@@ -201,6 +201,113 @@ let gpsOverride = null; // { lat: number, lon: number } or null for real GPS
 let currentLocation = null; // Store current actual location for display
 let selectedLocation = null; // Store location selected on map
 
+// ---------- GPS Live Tracking System ----------
+let isLiveTrackingEnabled = true; // Toggle for live GPS tracking
+let gpsUpdateInterval = 25; // Update frequency in seconds (default 25s)
+let gpsDistanceThreshold = 15; // Minimum distance in meters before reloading (default 15m)
+let gpsTrackingIntervalId = null; // ID for the tracking interval
+let lastKnownPosition = null; // Store last position to calculate distance moved
+
+// Store original settings when modal opens (for cancellation)
+let modalOriginalSettings = {
+  isLiveTrackingEnabled: true,
+  gpsUpdateInterval: 25,
+  selectedLocation: null
+};
+
+// Calculate distance between two lat/lon coordinates using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c; // Distance in meters
+}
+
+// Start periodic GPS tracking
+function startGPSTracking() {
+  // Don't start tracking if override is active (user manually set a location)
+  if (gpsOverride) {
+    console.log('GPS tracking not started - override is active');
+    return;
+  }
+  
+  // Clear any existing tracking interval
+  stopGPSTracking();
+  
+  console.log(`Starting GPS tracking: interval=${gpsUpdateInterval}s, threshold=${gpsDistanceThreshold}m`);
+  
+  gpsTrackingIntervalId = setInterval(() => {
+    // Skip if override is active (user manually set a location)
+    if (gpsOverride) {
+      console.log('Skipping GPS update - override is active');
+      stopGPSTracking();
+      return;
+    }
+    
+    // Get current GPS position
+    if (!navigator.geolocation) {
+      console.warn('Geolocation not available');
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const newLat = position.coords.latitude;
+        const newLon = position.coords.longitude;
+        
+        console.log(`GPS update: ${newLat.toFixed(6)}, ${newLon.toFixed(6)}`);
+        
+        // Check if we've moved enough to warrant a reload
+        if (lastKnownPosition) {
+          const distance = calculateDistance(
+            lastKnownPosition.lat,
+            lastKnownPosition.lon,
+            newLat,
+            newLon
+          );
+          
+          console.log(`Distance moved: ${distance.toFixed(2)}m (threshold: ${gpsDistanceThreshold}m)`);
+          
+          if (distance > gpsDistanceThreshold) {
+            console.log('Distance threshold exceeded - reloading tiles');
+            lastKnownPosition = { lat: newLat, lon: newLon };
+            currentLocation = { lat: newLat, lon: newLon };
+            refreshLocationAndTiles();
+          } else {
+            console.log('Distance below threshold - no reload needed');
+          }
+        } else {
+          // First update - just store position
+          lastKnownPosition = { lat: newLat, lon: newLon };
+          currentLocation = { lat: newLat, lon: newLon };
+          console.log('Initial position stored');
+        }
+      },
+      (error) => {
+        console.warn('GPS tracking error:', error);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, gpsUpdateInterval * 1000); // Convert seconds to milliseconds
+}
+
+// Stop periodic GPS tracking
+function stopGPSTracking() {
+  if (gpsTrackingIntervalId) {
+    clearInterval(gpsTrackingIntervalId);
+    gpsTrackingIntervalId = null;
+    console.log('GPS tracking stopped');
+  }
+}
+
 // ---------- Map system ----------
 let locationMap = null; // Leaflet map instance
 let locationMarker = null; // Marker for selected location
@@ -214,6 +321,7 @@ let toggleManual, manualInputs, applyManual, selectedCoordsDisplay;
 let heightSlider, heightValue, heightControl;
 let opacitySlider, opacityValue, opacityControl;
 let interactionPrompt, promptText;
+let liveTrackingToggle, updateFrequencySelect;
 
 // Initialize UI elements when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -251,6 +359,10 @@ document.addEventListener('DOMContentLoaded', () => {
   interactionPrompt = document.getElementById('interaction-prompt');
   promptText = document.querySelector('.prompt-text');
   
+  // GPS tracking settings elements
+  liveTrackingToggle = document.getElementById('live-tracking-toggle');
+  updateFrequencySelect = document.getElementById('update-frequency');
+  
   // All UI elements are now properly initialized
   
   // Add event listeners
@@ -266,6 +378,44 @@ document.addEventListener('DOMContentLoaded', () => {
   if (heightSlider) heightSlider.addEventListener('input', updatePlaneHeight);
   if (opacitySlider) opacitySlider.addEventListener('input', updatePlaneOpacity);
   
+  // GPS tracking settings event listeners
+  if (liveTrackingToggle) {
+    liveTrackingToggle.addEventListener('change', (e) => {
+      isLiveTrackingEnabled = e.target.checked;
+      
+      // Save this change immediately (user manually toggled, not from map interaction)
+      // This ensures the setting persists even if modal is closed
+      modalOriginalSettings.isLiveTrackingEnabled = isLiveTrackingEnabled;
+      
+      console.log('Live tracking:', isLiveTrackingEnabled ? 'enabled' : 'disabled');
+      
+      // Restart tracking with new setting
+      if (started && !gpsOverride) {
+        if (isLiveTrackingEnabled) {
+          startGPSTracking();
+        } else {
+          stopGPSTracking();
+        }
+      }
+    });
+  }
+  
+  if (updateFrequencySelect) {
+    updateFrequencySelect.addEventListener('change', (e) => {
+      gpsUpdateInterval = parseInt(e.target.value);
+      
+      // Save this change immediately (user manually changed frequency)
+      modalOriginalSettings.gpsUpdateInterval = gpsUpdateInterval;
+      
+      console.log('Update frequency changed to:', gpsUpdateInterval, 'seconds');
+      
+      // Restart tracking with new interval (only if not overridden)
+      if (started && isLiveTrackingEnabled && !gpsOverride) {
+        startGPSTracking();
+      }
+    });
+  }
+  
   // Close modal when clicking outside
   if (gpsModal) {
     gpsModal.addEventListener('click', (e) => {
@@ -278,31 +428,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---------- Map functionality ----------
 function initializeMap() {
-  if (locationMap) return; // Already initialized
-  
   const mapContainer = document.getElementById('location-map');
   if (!mapContainer) return;
   
-  // Get initial location for map center
-  const initialLat = gpsOverride?.lat || currentLocation?.lat || fallback.lat;
-  const initialLon = gpsOverride?.lon || currentLocation?.lon || fallback.lon;
+  // Get current location for map center (override takes precedence, then real GPS, then fallback)
+  const currentLat = gpsOverride?.lat || currentLocation?.lat || FALLBACK.lat;
+  const currentLon = gpsOverride?.lon || currentLocation?.lon || FALLBACK.lon;
   
-  // Initialize Leaflet map
-  locationMap = L.map('location-map').setView([initialLat, initialLon], 10);
+  if (!locationMap) {
+    // First time initialization - create the map
+    locationMap = L.map('location-map').setView([currentLat, currentLon], 10);
+    
+    // Add OpenStreetMap tiles with dark theme
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(locationMap);
+    
+    // Add marker for selected location
+    locationMarker = L.marker([currentLat, currentLon], {
+      draggable: true
+    }).addTo(locationMap);
+  } else {
+    // Map already exists - update marker and view to current location
+    locationMarker.setLatLng([currentLat, currentLon]);
+    locationMap.setView([currentLat, currentLon], locationMap.getZoom());
+  }
   
-  // Add OpenStreetMap tiles with dark theme
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-    maxZoom: 18
-  }).addTo(locationMap);
-  
-  // Add marker for selected location
-  locationMarker = L.marker([initialLat, initialLon], {
-    draggable: true
-  }).addTo(locationMap);
-  
-  // Set initial selected location
-  selectedLocation = { lat: initialLat, lon: initialLon };
+  // Set/update selected location to current position
+  selectedLocation = { lat: currentLat, lon: currentLon };
   updateSelectedLocationDisplay();
   
   // Handle map clicks
@@ -317,6 +471,15 @@ function initializeMap() {
     selectedLocation = { lat, lon };
     updateSelectedLocationDisplay();
     
+    // Instantly disable tracking toggle and frequency dropdown to show user it will be turned off
+    if (liveTrackingToggle) {
+      liveTrackingToggle.checked = false;
+      liveTrackingToggle.disabled = true;
+    }
+    if (updateFrequencySelect) {
+      updateFrequencySelect.disabled = true;
+    }
+    
     console.log('Map clicked:', selectedLocation);
   });
   
@@ -330,6 +493,15 @@ function initializeMap() {
     selectedLocation = { lat, lon };
     updateSelectedLocationDisplay();
     
+    // Instantly disable tracking toggle and frequency dropdown to show user it will be turned off
+    if (liveTrackingToggle) {
+      liveTrackingToggle.checked = false;
+      liveTrackingToggle.disabled = true;
+    }
+    if (updateFrequencySelect) {
+      updateFrequencySelect.disabled = true;
+    }
+    
     console.log('Marker dragged:', selectedLocation);
   });
   
@@ -342,10 +514,14 @@ function initializeMap() {
 }
 
 function updateSelectedLocationDisplay() {
-  if (!selectedCoordsDisplay || !selectedLocation) return;
+  if (!selectedCoordsDisplay) return;
   
-  selectedCoordsDisplay.textContent = 
-    `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lon.toFixed(6)}`;
+  if (selectedLocation) {
+    selectedCoordsDisplay.textContent = 
+      `${selectedLocation.lat.toFixed(6)}, ${selectedLocation.lon.toFixed(6)}`;
+  } else {
+    selectedCoordsDisplay.textContent = 'Click on map to select';
+  }
 }
 
 function toggleManualInput() {
@@ -398,6 +574,15 @@ function applyManualCoordinates() {
   selectedLocation = { lat, lon };
   updateSelectedLocationDisplay();
   
+  // Instantly disable tracking toggle and frequency dropdown to show user it will be turned off
+  if (liveTrackingToggle) {
+    liveTrackingToggle.checked = false;
+    liveTrackingToggle.disabled = true;
+  }
+  if (updateFrequencySelect) {
+    updateFrequencySelect.disabled = true;
+  }
+  
   // Hide manual inputs
   manualInputs.classList.add('hidden');
   toggleManual.textContent = '📝 Manual Input';
@@ -409,6 +594,21 @@ function applyManualCoordinates() {
 function openGPSModal() {
   if (!gpsModal) return;
   
+  // Save current settings in case user cancels
+  modalOriginalSettings = {
+    isLiveTrackingEnabled: isLiveTrackingEnabled,
+    gpsUpdateInterval: gpsUpdateInterval,
+    selectedLocation: selectedLocation ? { ...selectedLocation } : null
+  };
+  
+  // Set initial disabled state based on whether override is active
+  if (liveTrackingToggle) {
+    liveTrackingToggle.disabled = gpsOverride !== null;
+  }
+  if (updateFrequencySelect) {
+    updateFrequencySelect.disabled = gpsOverride !== null;
+  }
+  
   gpsModal.classList.remove('hidden');
   
   // Initialize map after modal is shown
@@ -419,6 +619,57 @@ function openGPSModal() {
 
 function closeGPSModal() {
   if (!gpsModal) return;
+  
+  console.log('Closing modal - original settings:', modalOriginalSettings);
+  console.log('Current selectedLocation before restore:', selectedLocation);
+  
+  // Restore original settings (user cancelled without applying)
+  isLiveTrackingEnabled = modalOriginalSettings.isLiveTrackingEnabled;
+  gpsUpdateInterval = modalOriginalSettings.gpsUpdateInterval;
+  selectedLocation = modalOriginalSettings.selectedLocation ? { ...modalOriginalSettings.selectedLocation } : null;
+  
+  console.log('Restored selectedLocation:', selectedLocation);
+  
+  // Update UI to reflect restored settings
+  if (liveTrackingToggle) {
+    liveTrackingToggle.checked = isLiveTrackingEnabled;
+    liveTrackingToggle.disabled = gpsOverride !== null; // Restore disabled state based on override
+  }
+  if (updateFrequencySelect) {
+    updateFrequencySelect.value = gpsUpdateInterval;
+    updateFrequencySelect.disabled = gpsOverride !== null; // Restore disabled state based on override
+  }
+  
+  // Restore map marker position and center map
+  if (locationMap && locationMarker) {
+    if (selectedLocation) {
+      console.log('Restoring marker to:', selectedLocation);
+      locationMarker.setLatLng([selectedLocation.lat, selectedLocation.lon]);
+      locationMap.setView([selectedLocation.lat, selectedLocation.lon], locationMap.getZoom());
+      updateSelectedLocationDisplay();
+    } else {
+      // If no selected location, restore to current/override location
+      const restoreLat = gpsOverride?.lat || currentLocation?.lat || FALLBACK.lat;
+      const restoreLon = gpsOverride?.lon || currentLocation?.lon || FALLBACK.lon;
+      console.log('No saved location, restoring to current/fallback:', { lat: restoreLat, lon: restoreLon });
+      locationMarker.setLatLng([restoreLat, restoreLon]);
+      locationMap.setView([restoreLat, restoreLon], locationMap.getZoom());
+      updateSelectedLocationDisplay();
+    }
+  }
+  
+  // Clear manual input fields
+  if (gpsLatInput) gpsLatInput.value = '';
+  if (gpsLonInput) gpsLonInput.value = '';
+  
+  // Hide manual inputs if they're showing
+  if (manualInputs && !manualInputs.classList.contains('hidden')) {
+    manualInputs.classList.add('hidden');
+    if (toggleManual) toggleManual.textContent = '📝 Manual Input';
+  }
+  
+  console.log('GPS modal closed - settings and location restored');
+  
   gpsModal.classList.add('hidden');
 }
 
@@ -445,7 +696,27 @@ function useCurrentGPS() {
     gpsBtn.textContent = '🌍 GPS Location';
   }
   
-  closeGPSModal();
+  // Re-enable live tracking and update UI
+  isLiveTrackingEnabled = true;
+  if (liveTrackingToggle) {
+    liveTrackingToggle.checked = true;
+    liveTrackingToggle.disabled = false; // Enable toggle when override is cleared
+  }
+  if (updateFrequencySelect) {
+    updateFrequencySelect.disabled = false; // Enable frequency dropdown when override is cleared
+  }
+  
+  // Save these as the new original settings (user applied changes)
+  modalOriginalSettings.isLiveTrackingEnabled = isLiveTrackingEnabled;
+  modalOriginalSettings.gpsUpdateInterval = gpsUpdateInterval;
+  modalOriginalSettings.selectedLocation = null;
+  
+  // Restart GPS tracking
+  if (started) {
+    startGPSTracking();
+  }
+  
+  gpsModal.classList.add('hidden');
   refreshLocationAndTiles();
 }
 
@@ -467,7 +738,28 @@ function applySelectedLocation() {
     gpsBtn.textContent = '🌍 Override';
   }
   
-  closeGPSModal();
+  // Stop GPS tracking when override is set (stay at manually selected location)
+  stopGPSTracking();
+  
+  // Update internal state and UI toggle to reflect that tracking is now disabled
+  isLiveTrackingEnabled = false;
+  if (liveTrackingToggle) {
+    liveTrackingToggle.checked = false;
+    liveTrackingToggle.disabled = true; // Disable toggle when override is active
+  }
+  if (updateFrequencySelect) {
+    updateFrequencySelect.disabled = true; // Disable frequency dropdown when override is active
+  }
+  
+  // Save these as the new original settings (user applied changes)
+  modalOriginalSettings.isLiveTrackingEnabled = isLiveTrackingEnabled;
+  modalOriginalSettings.gpsUpdateInterval = gpsUpdateInterval;
+  modalOriginalSettings.selectedLocation = selectedLocation ? { ...selectedLocation } : null;
+  
+  console.log('GPS tracking stopped - using manual override location');
+  
+  // Close modal directly without restoring settings (user applied changes)
+  gpsModal.classList.add('hidden');
   refreshLocationAndTiles();
 }
 
@@ -587,6 +879,7 @@ function getLatLonOnce() {
       (p) => {
         const location = { lat: p.coords.latitude, lon: p.coords.longitude };
         currentLocation = location;
+        lastKnownPosition = location; // Store for tracking system
         console.log('Real GPS location:', location);
         resolve(location);
       },
@@ -594,6 +887,7 @@ function getLatLonOnce() {
         showFallbackLocationAlert();
         const location = FALLBACK;
         currentLocation = location;
+        lastKnownPosition = location; // Store for tracking system
         resolve(location);
       },
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
@@ -634,10 +928,10 @@ let tileGroup = null; // Group container for all tile planes
 // ---------- fog-enabled material for distance fading ----------
 function createAlphaFogMaterial() {
   const material = new THREE.MeshBasicMaterial({
-    color: 0xff00ff, // bright debug until texture arrives
+    color: 0xffffff, // white, will be replaced by texture
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 1
+    opacity: 0 // Start invisible, will fade in when texture loads
   });
   
   material.onBeforeCompile = function (shader) {
@@ -724,6 +1018,11 @@ function createTileGrid(centerTileX, centerTileY) {
   // Clear existing tiles
   clearTileGrid();
   
+  // Create new tiles
+  buildTileGrid(centerTileX, centerTileY);
+}
+
+function buildTileGrid(centerTileX, centerTileY) {
   // Store center tile coordinates
   centerTile = { tileX: centerTileX, tileY: centerTileY };
   
@@ -744,7 +1043,6 @@ function createTileGrid(centerTileX, centerTileY) {
       });
     }
   }
-  
 }
 
 function clearTileGrid() {
@@ -771,18 +1069,64 @@ function loadTileGridTextures(lat, lon) {
   // Store pixel offsets for positioning
   currentPixelOffsets = { pixelX, pixelY };
   
-  // Create the tile grid first
-  createTileGrid(tileX, tileY);
+  // Save reference to old tiles (will remove after new ones load)
+  const oldTileGrid = new Map(tileGrid);
+  const oldTileGroup = tileGroup;
+  
+  // Clear current grid reference (but don't dispose yet)
+  tileGrid.clear();
+  tileGroup = null;
+  
+  // Create new tile grid
+  buildTileGrid(tileX, tileY);
+  
+  // Track how many textures have loaded
+  let loadedCount = 0;
+  const totalTiles = tileGrid.size;
+  const newTileMaterials = []; // Store materials to update opacity atomically
   
   // Load textures for all tiles in the grid
   tileGrid.forEach(({ material, tileX: tileTileX, tileY: tileTileY }, tileKey) => {
-    loadSingleTileTexture(tileTileX, tileTileY, material);
+    newTileMaterials.push(material);
+    
+    loadSingleTileTexture(tileTileX, tileTileY, material, () => {
+      // Callback when texture loads
+      loadedCount++;
+      
+      // Once all textures are loaded, swap old and new tiles atomically
+      if (loadedCount === totalTiles) {
+        // Atomic swap: remove old tiles and show new ones in same frame
+        // First, dispose old tiles
+        oldTileGrid.forEach(({ plane }) => {
+          if (oldTileGroup) {
+            oldTileGroup.remove(plane);
+          }
+          plane.geometry.dispose();
+          plane.material.dispose();
+        });
+        
+        // Remove old group from scene
+        if (oldTileGroup) {
+          scene.remove(oldTileGroup);
+        }
+        
+        // Get current opacity from slider (respects user setting)
+        const currentOpacity = opacitySlider ? parseInt(opacitySlider.value) / 100 : 0.5;
+        
+        // Immediately show new tiles at current opacity setting (this happens in the same frame)
+        newTileMaterials.forEach(mat => {
+          mat.opacity = currentOpacity;
+        });
+        
+        console.log('Tile swap completed atomically with opacity:', currentOpacity);
+      }
+    });
   });
   
   console.log(`Loading tile grid at ${tileX},${tileY} (${pixelX},${pixelY})`);
 }
 
-function loadSingleTileTexture(tileX, tileY, material) {
+function loadSingleTileTexture(tileX, tileY, material, onLoadCallback) {
   const url = `https://wplace-proxy.deezus.workers.dev/wplace/files/s0/tiles/${tileX}/${tileY}.png?t=${Date.now()}`;
   const loader = new THREE.TextureLoader();
   loader.crossOrigin = 'anonymous';
@@ -797,12 +1141,24 @@ function loadSingleTileTexture(tileX, tileY, material) {
       material.map = texture;
       material.color.set(0xffffff);
       material.transparent = true;
-      material.opacity = 0.5;
+      // Don't set opacity here - let the callback handle it atomically
       material.needsUpdate = true;
       console.log(`Tile texture loaded for ${tileX},${tileY}`);
+      
+      // Call the callback if provided
+      if (onLoadCallback) {
+        onLoadCallback();
+      }
     },
     undefined,
-    (err) => console.warn(`Failed to load tile texture for ${tileX},${tileY}:`, err)
+    (err) => {
+      console.warn(`Failed to load tile texture for ${tileX},${tileY}:`, err);
+      
+      // Still call callback even on error to prevent hanging
+      if (onLoadCallback) {
+        onLoadCallback();
+      }
+    }
   );
 }
 
@@ -955,6 +1311,11 @@ async function startAR() {
       
       // Show interaction prompt
       showInteractionPrompt(isActuallyMobile);
+      
+      // Start GPS tracking if enabled and not overridden
+      if (isLiveTrackingEnabled && !gpsOverride) {
+        startGPSTracking();
+      }
     } else {
       // Mobile device without motion permission - just hide start screen and show button change
       console.log('Mobile device without motion permission - staying on start screen');

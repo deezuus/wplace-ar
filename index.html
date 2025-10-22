@@ -119,9 +119,33 @@
           </div>
         </div>
         
+        
+        
         <div class="modal-actions">
           <button id="gps-apply" class="primary-button large">Apply Selected Location</button>
           <button id="gps-use-current" class="reset-button" title="Reset to current GPS location">🔄 Reset</button>
+        </div>
+        <!-- Live Tracking Settings -->
+        <div class="tracking-settings">
+          <h4>GPS Tracking Settings</h4>
+          
+          <div class="setting-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="live-tracking-toggle" checked />
+              <span>Enable Live GPS Tracking</span>
+            </label>
+            <p class="setting-description">Automatically update your position as you walk around. (Disabled when using override location)</p>
+          </div>
+          
+          <div class="setting-group">
+            <label for="update-frequency">Update Frequency:</label>
+            <select id="update-frequency">
+              <option value="10">Every 10 seconds</option>
+              <option value="25" selected>Every 25 seconds</option>
+              <option value="40">Every 40 seconds</option>
+            </select>
+            <p class="setting-description">How often to check for position changes</p>
+          </div>
         </div>
       </div>
     </div>
