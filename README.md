@@ -23,18 +23,9 @@ A augmented reality webapp that overlays [wplace.live](https://wplace.live/) art
 
 ## How It Works
 
-The app uses your device's geolocation to determine which section of the collaborative canvas to display. This artwork appears as a plane floating above you in 3D space, viewable through your device's camera feed. The experience adapts automatically between mobile AR mode (using device orientation) and desktop mode (using mouse controls).
+The app uses your device's geolocation to determine which section of the wplace to display. The wplace map appears as a plane floating above you in 3D space, viewable through your device's camera feed. The experience adapts automatically between mobile AR mode (using device orientation) and desktop mode (using mouse controls).
 
-To get around CORS at the moment, requests to the API are routed through a Cloudflare Worker proxy. I turn this worker on/off to prevent abuse while developing at the moment so it may not always be available. The goal is to open this up when I'm happy with the state of the project to share to others.
-
-## Quick Start
-
-1. Open the app in a web browser (HTTPS required for camera/motion permissions)
-2. Grant camera and location permissions when prompted
-3. On iOS devices, grant motion/orientation permissions
-4. Tap "Start AR" to begin the experience
-5. Look up to see the floating artwork in the sky
-6. Use "Recenter Sky" to reset the artwork position above you
+To get around CORS, requests to the API are routed through a Cloudflare Worker proxy. I turn this worker on/off to prevent abuse while developing at the moment so it may not always be available. The goal is to open this up when I'm happy with the state of the project to share to others.
 
 ## Technical Stack
 
@@ -42,6 +33,8 @@ To get around CORS at the moment, requests to the API are routed through a Cloud
 - **WebRTC**: Camera feed integration
 - **Geolocation API**: GPS positioning
 - **Device Orientation API**: Mobile gyroscope/accelerometer access
+- **Cloudflare Worker**: Proxying API requests to get around CORS
+- **Cursor & Claude Sonnet**: For vibe coding half of it 
 
 ## Development
 
