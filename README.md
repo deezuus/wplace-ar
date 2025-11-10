@@ -27,6 +27,61 @@ The app uses your device's geolocation to determine which section of the wplace 
 
 To get around CORS, requests to the API are routed through a Cloudflare Worker proxy. I turn this worker on/off to prevent abuse while developing at the moment so it may not always be available. The goal is to open this up when I'm happy with the state of the project to share to others.
 
+## Cloudflare Worker Proxy
+
+The proxy worker handles CORS by forwarding requests to the wplace.live backend, sanitizing headers, and caching responses for improved performance. It normalizes cache keys (ignoring timestamp query parameters) and implements a 24-hour cache with stale-while-revalidate for up to 7 days.
+
+```javascript
+export default {
+  async fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    if (!url.pathname.startsWith("/wplace/")) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const upstream = new URL(
+      "https://backend.wplace.live" + url.pathname.replace(/^\/wplace/, "")
+    );
+    upstream.search = url.search;
+
+    // Normalize cache key (ignore ?t=...)
+    const cacheKeyURL = new URL(upstream);
+    cacheKeyURL.searchParams.delete("t");
+    const cache = caches.default;
+
+    let cached = await cache.match(cacheKeyURL.toString());
+    let r = cached;
+    if (!r) {
+      const u = await fetch(upstream.toString(), { method: "GET" });
+      r = new Response(u.body, u);
+    }
+
+    // Sanitize + set our headers
+    const h = new Headers(r.headers);
+    h.delete("access-control-allow-origin");
+    h.delete("access-control-allow-credentials");
+    h.delete("set-cookie");
+    if (!h.get("content-type")) h.set("content-type", "image/png");
+
+    // For dev: allow any origin (safe since no credentials)
+    h.set("Access-Control-Allow-Origin", "*");
+
+    // Caching (store the sanitized response so wplace headers don't reappear)
+    h.set(
+      "Cache-Control",
+      "public, s-maxage=86400, stale-while-revalidate=604800"
+    );
+    const sanitized = new Response(r.body, { status: r.status, headers: h });
+
+    if (!cached) {
+      ctx.waitUntil(cache.put(cacheKeyURL.toString(), sanitized.clone()));
+    }
+
+    return sanitized;
+  }
+};
+```
+
 ## Technical Stack
 
 - **Three.js**: 3D graphics and WebGL rendering
@@ -38,4 +93,17 @@ To get around CORS, requests to the API are routed through a Cloudflare Worker p
 
 ## Development
 
-Built with Vite for fast development and modern JavaScript tooling. The main application logic is in `src/main.js`
+Built with Vite for fast development and modern JavaScript tooling. The application is organized into modular components:
+
+### Project Structure
+
+- **`src/main.js`** - Application entry point, coordinates module initialization and render loop
+- **`src/config.js`** - Configuration constants (zoom levels, tile sizes, fog parameters, GPS defaults)
+- **`src/scene.js`** - Three.js scene, renderer, and camera setup
+- **`src/video.js`** - Camera feed management and video texture handling
+- **`src/utils.js`** - Utility functions (mobile detection, permissions, coordinate math)
+- **`src/controls.js`** - Device orientation and mouse look controls with adaptive smoothing
+- **`src/geolocation.js`** - GPS tracking, location management, and override system
+- **`src/map.js`** - Leaflet map functionality for location selection
+- **`src/tiles.js`** - Tile grid system, texture loading, and 3D plane positioning
+- **`src/ui.js`** - UI element management, event handlers, and user interface controls
