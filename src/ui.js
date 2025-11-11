@@ -428,24 +428,49 @@ function applySelectedLocation() {
 
 /**
  * Photo capture functionality
+ * Uses a flag-based approach to capture in the render loop for consistent buffer state
  */
+let snap = false;
+
 function capturePhoto() {
-  try {
-    // Render one frame to ensure everything is up to date
-    renderer.render(scene, camera);
-    
-    // Capture the canvas as a data URL
-    const dataURL = renderer.domElement.toDataURL('image/png', 1.0);
+  // Set flag to trigger capture in the render loop
+  snap = true;
+}
+
+/**
+ * Perform the actual photo capture (called from render loop)
+ * Uses toBlob for better memory efficiency
+ */
+function performCapture() {
+  const canvas = renderer.domElement;
+  
+  // Use toBlob instead of toDataURL for better performance
+  canvas.toBlob(function(blob) {
+    if (!blob) {
+      console.error('Failed to create blob from canvas');
+      // Error feedback
+      photoBtn.textContent = '❌ Error';
+      photoBtn.style.background = 'rgba(255, 0, 0, 0.8)';
+      
+      setTimeout(() => {
+        photoBtn.textContent = '📷 Save Photo';
+        photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
+      }, 2000);
+      return;
+    }
     
     // Create a temporary link element to trigger download
     const link = document.createElement('a');
     link.download = `wplace-ar-photo-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)}.png`;
-    link.href = dataURL;
+    link.href = URL.createObjectURL(blob);
     
     // Trigger the download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Clean up the object URL
+    URL.revokeObjectURL(link.href);
     
     // Visual feedback
     photoBtn.textContent = '✓ Saved!';
@@ -457,17 +482,18 @@ function capturePhoto() {
     }, 2000);
     
     console.log('Photo captured and downloaded successfully');
-  } catch (error) {
-    console.error('Failed to capture photo:', error);
-    
-    // Error feedback
-    photoBtn.textContent = '❌ Error';
-    photoBtn.style.background = 'rgba(255, 0, 0, 0.8)';
-    
-    setTimeout(() => {
-      photoBtn.textContent = '📷 Save Photo';
-      photoBtn.style.background = 'rgba(0, 0, 0, 0.8)';
-    }, 2000);
+    console.log(blob);
+    console.log(link.href);
+  }, 'image/png');
+}
+
+/**
+ * Check if capture is requested and perform it (called from render loop)
+ */
+export function checkAndCapture() {
+  if (snap) {
+    performCapture();
+    snap = false;
   }
 }
 

@@ -7,7 +7,7 @@
 
 import { renderer, scene, camera } from './scene.js';
 import { updateControls } from './controls.js';
-import { initializeUI, startAR, updateCurrentLocationDisplay } from './ui.js';
+import { initializeUI, startAR, updateCurrentLocationDisplay, checkAndCapture } from './ui.js';
 import { setRefreshTilesCallback, setUpdateCurrentLocationDisplayCallback } from './geolocation.js';
 import { loadTileGridTextures } from './tiles.js';
 
@@ -30,4 +30,7 @@ renderer.setAnimationLoop((t) => {
   const currentTime = t || performance.now();
   updateControls(currentTime);
   renderer.render(scene, camera);
+  
+  // Check if photo capture is requested and perform it after rendering
+  checkAndCapture();
 });
