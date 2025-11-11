@@ -1,18 +1,7 @@
-<img width="1693" height="2048" alt="Pasted image 20250817152522" src="https://github.com/user-attachments/assets/4087b916-221e-452e-8d6c-7b998e837ede" /> 
+| | |
+|:--:|:--:|
+| <img width="400" alt="Inspiration" src="https://github.com/user-attachments/assets/4087b916-221e-452e-8d6c-7b998e837ede" /><br><div align="center"><i>The Inspiration</i><br>(Thanks [vonixskulls](https://x.com/vonixskulls/status/1953965288514265576) and [m1stakezwermade](https://x.com/m1stakezwermade/status/1954023746270114144) on Twitter)</div> | <img width="400" alt="Actual" src="https://github.com/user-attachments/assets/69c82518-0cac-4b34-b46d-5886a7429a74" /><br><div align="center"><i>Actual <br> (I did not get a chance to go to the CN Tower to take an actual pic ☹️)</i></div> |
 
-
-
-<div align="center">
-  <i>The Inspiration</i>
-  
-  (Thanks [vonixskulls](https://x.com/vonixskulls/status/1953965288514265576) and [m1stakezwermade](https://x.com/m1stakezwermade/status/1954023746270114144) on Twitter)
-</div>
-
-<img width="1693" height="2048" alt="Pasted image 20250817152522" src="https://github.com/user-attachments/assets/69c82518-0cac-4b34-b46d-5886a7429a74" /> 
-
-<div align="center">
-  <i>Actual</i>
-</div>
 
 <br>
 
