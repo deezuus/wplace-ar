@@ -20,7 +20,7 @@ A augmented reality webapp that overlays [wplace.live](https://wplace.live/) art
 
 The app uses your device's geolocation to determine which section of the wplace to display. The wplace map appears as a plane floating above you in 3D space, viewable through your device's camera feed. The experience adapts automatically between mobile AR mode (using device orientation) and desktop mode (using mouse controls).
 
-To get around CORS, requests to the API are routed through a Cloudflare Worker proxy. I turn this worker on/off to prevent abuse while developing at the moment so it may not always be available. The goal is to open this up when I'm happy with the state of the project to share to others.
+To get around CORS, requests to the API are routed through a Cloudflare Worker proxy.
 
 ## Cloudflare Worker Proxy
 
